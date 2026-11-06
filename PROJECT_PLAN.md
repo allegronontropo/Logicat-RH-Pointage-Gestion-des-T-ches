@@ -916,7 +916,7 @@ The `seed.py` script:
   - `employee1@logicat.ma` — Employee (with department, position, hire_date)
 - Passwords: strong but memorable for demo, documented in README.
 - Optionally creates sample attendance and task data for demo purposes.
-- **Controlled by `SEED_DEMO_DATA` env var, which defaults to `false`.** Automatic demo seeding never runs in production. To seed locally for development/demo: `SEED_DEMO_DATA=true python seed.py` (or run via Docker Compose with `SEED_DEMO_DATA=true`).
+- **Controlled by `SEED_DEMO_DATA` env var.** Automatic demo seeding must never run in production with predictable credentials. To seed locally for development/demo: `SEED_DEMO_DATA=true python seed.py` (or run via Docker Compose with `SEED_DEMO_DATA=true`).
 - **README requirement:** Document that `SEED_DEMO_DATA=true` with predictable demo credentials must never be enabled in production.
 
 For this assessment, `SEED_DEMO_DATA` defaults to `true` in `.env.example`. The `git clone` → `docker compose up` → working demo criterion depends on this. `seed.py` remains idempotent, so re-running it is safe. Production deployments must override to `false`.
