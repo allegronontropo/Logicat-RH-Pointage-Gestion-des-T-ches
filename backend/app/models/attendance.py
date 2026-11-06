@@ -6,7 +6,7 @@ SQLAlchemy 2.0 model for the `attendances` table.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 
 from sqlalchemy import String, ForeignKey, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -26,10 +26,11 @@ class Attendance(Base):
     employee_id: Mapped[int] = mapped_column(
         ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    date: Mapped[datetime] = mapped_column(Date, nullable=False)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
     check_in: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     check_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="PRESENT")
+    justification_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("employee_id", "date", name="uq_employee_date"),

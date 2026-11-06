@@ -6,7 +6,7 @@ SQLAlchemy 2.0 model for the `tasks` table.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 
 from sqlalchemy import String, ForeignKey, Date, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -27,7 +27,7 @@ class Task(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="MEDIUM")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="TODO")
-    due_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     assigned_to: Mapped[int] = mapped_column(
         ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True
     )

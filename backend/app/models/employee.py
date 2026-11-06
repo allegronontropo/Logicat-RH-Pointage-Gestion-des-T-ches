@@ -6,7 +6,7 @@ SQLAlchemy 2.0 model for the `employees` table.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import String, ForeignKey, Date
@@ -32,7 +32,7 @@ class Employee(Base):
     )
     department: Mapped[str | None] = mapped_column(String(100), nullable=True)
     position: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    hire_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="employee")
