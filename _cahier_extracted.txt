@@ -1,0 +1,172 @@
+LOGICAT / GROUP 	TEST TECHNIQUE · FULL STACK
+LOGICAT GROUP
+CAHIER DES CHARGES
+TEST TECHNIQUE FULL STACK
+APPLICATION RH · POINTAGE & GESTION DES TÂCHES
+FORMAT 	CADRE DU TEST
+Public cible 	Développeurs Full Stack en formation
+Durée recommandée 	5 jours · Projet individuel
+Frontend 	React.js · React Router
+Backend 	Python · FastAPI · API REST
+Données 	PostgreSQL ou SQLite
+Sécurité 	JWT · Hachage des mots de passe · Permissions
+Finalité du projet
+Concevoir une application web RH avec deux espaces distincts — Administrateur RH et Employé — couvrant la gestion
+des utilisateurs, le pointage quotidien, les pauses et les tâches professionnelles.
+Ce qui sera évalué
+● Conception fonctionnelle et modélisation de données.
+● Développement API et intégration React/FastAPI.
+● Gestion des accès et respect des règles métier.
+● Qualité du code, tests, documentation et présentation.
+Les données de démonstration doivent être fictives. Aucune inscription publique n’est autorisée.
+Document de formation • LOGICAT GROUP | Usage interne
+
+-- 1 of 5 --
+
+LOGICAT / GROUP 	TEST TECHNIQUE · FULL STACK
+01 Présentation & authentification
+Chaque utilisateur se connecte avec son email et son mot de passe. Après authentification JWT, il est redirigé vers son
+interface selon son rôle. Les pages et API doivent être protégées côté serveur.
+RÔLE 	PÉRIMÈTRE
+Administrateur RH
+Gérer tous les utilisateurs, y compris créer d’autres Admin RH ;
+suivre les pointages et pauses ; créer, attribuer et suivre les
+tâches.
+Employé Consulter son profil, déclarer ses présences et pauses ; consulter
+les tâches qui lui sont attribuées et en actualiser le statut.
+Règles de gestion des comptes
+● Un Admin RH peut créer un compte Employé ou un autre compte Admin RH disposant des mêmes droits.
+● Un compte Admin RH initial permet de démarrer l’application ; il n’existe aucune inscription publique.
+● L’email est unique. Les mots de passe sont hachés et ne sont jamais enregistrés en clair.
+● Un compte désactivé ne doit plus pouvoir accéder aux API, même avec une session existante.
+● L’administrateur ne peut pas désactiver son propre compte ni le dernier Admin RH actif.
+02 Espace Administrateur RH
+Tableau de bord
+● Employés actifs, employés présents aujourd’hui et absences enregistrées.
+● Nombre de tâches total, en cours et terminées.
+Gestion des utilisateurs
+● Créer un utilisateur en choisissant son rôle : Admin RH ou Employé.
+● Consulter, rechercher et filtrer les comptes ; modifier et désactiver des utilisateurs.
+● Réinitialiser un mot de passe et consulter la fiche d’un employé.
+CHAMP 	VALEUR / RÈGLE
+Identité 	Nom, prénom, email unique, téléphone
+Profession 	Département, poste, date d’embauche
+Compte 	Rôle : Admin RH / Employé ; statut : Actif / Inactif
+Suivi des présences et des pauses
+● Consulter les heures d’arrivée et de départ de tous les employés.
+● Voir les pauses du matin, du déjeuner et du soir, avec leurs durées.
+● Calculer les durées de présence, de pause et de travail effectif ; filtrer par date et employé.
+● Enregistrer une absence justifiée ou non justifiée.
+Gestion des tâches
+● Créer, modifier, supprimer et attribuer une tâche à un employé.
+● Définir titre, description, priorité (Basse / Moyenne / Haute) et échéance.
+● Filtrer les tâches par employé, priorité et statut ; suivre leur avancement.
+Document de formation • LOGICAT GROUP | Usage interne
+
+-- 2 of 5 --
+
+LOGICAT / GROUP 	TEST TECHNIQUE · FULL STACK
+03 Espace Employé
+Dashboard et profil
+● Afficher nom, prénom, département, poste, présence du jour, heures de pointage et temps de travail effectif.
+● Afficher les compteurs des tâches À faire, En cours et Terminées.
+● Consulter son profil ; modifier son téléphone et son mot de passe.
+● Le rôle, le département, le poste et le statut du compte restent administrés par l’Admin RH.
+Pointage et pauses
+L’employé enregistre lui-même son arrivée, ses trois pauses et son départ. Les heures sont enregistrées automatiquement
+par le serveur.
+ACTION 	DESCRIPTION
+Check-in 	Début de la journée de travail
+Pause matin : début / fin 	Déclaration et reprise du travail
+Pause déjeuner : début / fin 	Déclaration et reprise du travail
+Pause soir : début / fin 	Déclaration et reprise du travail
+Check-out 	Fin de la journée de travail
+Règles métier du pointage
+● Check-in obligatoire avant les pauses ou le Check-out ; un seul Check-in et Check-out par jour.
+● Une pause doit être terminée avant d’en commencer une autre ; une seule pause active à la fois.
+● Le Check-out est interdit tant qu’une pause est active.
+● Chaque type de pause ne peut être enregistré qu’une seule fois par jour.
+● L’employé ne peut pas modifier directement ses pointages historiques.
+Exemple de calcul
+ÉVÉNEMENT 	HORAIRE
+Check-in 	09:00
+Pause matin 	10:30 – 10:45
+Pause déjeuner 	13:00 – 14:00
+Pause soir 	16:30 – 16:45
+Check-out 	18:00
+Résultat — Présence : 9 h | Pauses : 1 h 30 | Travail effectif : 7 h 30
+Mes tâches
+● Consulter uniquement les tâches attribuées, leur titre, description, priorité et échéance.
+● Filtrer par statut et priorité ; mettre à jour seulement le statut : À faire, En cours, Terminée.
+● Une tâche créée par un Admin RH a par défaut le statut « À faire ».
+● L’employé ne peut ni créer, ni réattribuer, ni modifier le contenu, ni supprimer une tâche.
+Document de formation • LOGICAT GROUP | Usage interne
+
+-- 3 of 5 --
+
+LOGICAT / GROUP 	TEST TECHNIQUE · FULL STACK
+04 Matrice des permissions
+FONCTIONNALITÉ 	ADMIN RH 	EMPLOYÉ
+Connexion / déconnexion 	Oui 	Oui
+Créer un Admin RH ou un Employé 	Oui 	Non
+Modifier, désactiver les comptes 	Oui 	Non
+Voir tous les utilisateurs 	Oui 	Non
+Consulter et mettre à jour son profil 	Oui 	Oui (limité)
+Voir tous les pointages / pauses 	Oui 	Non
+Effectuer Check-in, pauses et Check-out Non 	Oui (personnel)
+Voir ses propres pointages 	Selon profil 	Oui
+Consulter les heures travaillées 	Tous les employés 	Ses heures
+Déclarer une absence 	Oui 	Non
+Créer / attribuer / modifier / supprimer
+une tâche Oui 	Non
+Voir toutes les tâches 	Oui 	Non
+Voir les tâches qui lui sont attribuées 	— 	Oui
+Changer le statut de ses tâches 	— 	Oui
+Toutes les vérifications de permissions sont obligatoires côté backend. Modifier un identifiant dans une requête API ne doit
+jamais permettre d’accéder aux données d’un autre employé.
+05 Architecture attendue
+COUCHE 	EXIGENCE
+Frontend 	React.js ; React Router ; interfaces responsive
+Backend 	Python ; FastAPI ; API REST ; validation des entrées
+Données 	PostgreSQL ou SQLite ; intégrité et persistance
+Sécurité JWT ; hachage des mots de passe ; contrôle des rôles et de la
+propriété des ressources
+Documentation 	Swagger/OpenAPI et README d’installation
+Versioning 	Git / GitHub
+Tables principales
+● users : identité, authentification, rôle et état du compte.
+● employees : informations professionnelles des employés.
+● attendances : heure d’arrivée, heure de départ, statut de présence.
+● breaks : type de pause, début, fin et rattachement au pointage.
+● tasks : titre, description, assignation, priorité, échéance et statut.
+Document de formation • LOGICAT GROUP | Usage interne
+
+-- 4 of 5 --
+
+LOGICAT / GROUP 	TEST TECHNIQUE · FULL STACK
+06 Réalisation & évaluation
+Planning recommandé — 5 jours
+JOUR 	TRAVAUX ATTENDUS
+01 	Architecture, conception BDD, authentification et rôles.
+02 	API REST : utilisateurs, présences, pauses et tâches.
+03 Interface Admin RH : dashboard, utilisateurs, suivi et gestion des
+tâches.
+04 Interface Employé : profil, pointage, pauses, tâches ; intégration
+API.
+05 Tests des permissions et calculs, corrections, documentation,
+démonstration.
+Livrables
+● Code source frontend React et backend FastAPI dans un dépôt GitHub.
+● Base de données persistante et schéma relationnel.
+● Deux interfaces fonctionnelles et authentification avec rôles.
+● Pointage avec trois pauses et calcul correct des heures.
+● Création, affectation et suivi des tâches.
+● Documentation des API, README et instructions de lancement.
+● Trois comptes de démonstration : deux Admin RH et un Employé.
+Présentation finale
+Chaque apprenant devra démontrer les deux espaces, expliquer ses API, son modèle de données, les principales règles
+métier et les mécanismes de sécurité utilisés.
+Document de formation • LOGICAT GROUP | Usage interne
+
+-- 5 of 5 --
+
