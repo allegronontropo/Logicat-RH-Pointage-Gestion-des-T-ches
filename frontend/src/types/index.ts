@@ -7,6 +7,8 @@ export interface User {
   last_name: string;
   role: "ADMIN_RH" | "EMPLOYEE";
   is_active: boolean;
+  phone?: string | null;
+  employee_profile?: EmployeeProfile | null;
 }
 
 export interface TokenResponse {
@@ -17,18 +19,18 @@ export interface TokenResponse {
 
 export interface EmployeeProfile {
   id: number;
-  user_id: number;
+  user_id?: number;
   department: string | null;
   position: string | null;
   hire_date: string | null;
 }
 
 export interface UserDetail extends User {
-  department: string | null;
-  position: string | null;
-  hire_date: string | null;
-  phone: string | null;
-  created_at: string;
+  department?: string | null;
+  position?: string | null;
+  hire_date?: string | null;
+  phone?: string | null;
+  created_at?: string;
 }
 
 export interface Assignee {

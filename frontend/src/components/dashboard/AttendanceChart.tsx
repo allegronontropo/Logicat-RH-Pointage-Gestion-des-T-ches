@@ -14,8 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getAttendanceTrends } from "@/api/dashboard";
 import { formatDate } from "@/lib/utils";
 
-// TODO: Replace with real aggregated data when available.
-
 const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 interface CustomTooltipProps {
@@ -228,7 +226,7 @@ export function AttendanceChart() {
         <div className="mt-3 flex items-center justify-center gap-6 text-xs font-medium text-slate-600">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-[#1E40AF]" />
-            <span>Pointages réels (GET /api/dashboard/trends)</span>
+            <span>Employés présents</span>
           </div>
         </div>
       </CardContent>

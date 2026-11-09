@@ -17,7 +17,6 @@ import {
   CheckSquare,
   LogOut,
   Building2,
-  Search,
   Menu,
   X,
   ChevronRight,
@@ -47,7 +46,6 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   async function handleLogout() {
     await logout();
@@ -240,25 +238,6 @@ export default function AdminLayout() {
               <span className="hover:text-slate-900 cursor-pointer">Admin</span>
               <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
               <span className="text-slate-900 font-semibold">{pageTitle}</span>
-            </div>
-          </div>
-
-          {/* Center: Global Search Bar */}
-          <div className="flex-1 max-w-md mx-4 hidden md:block">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search anything... (Employé, Tâche, Pointage)"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-14 py-2 text-xs font-medium text-slate-800 placeholder:text-slate-400 transition-colors focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary shadow-inner"
-              />
-              <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2">
-                <kbd className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 shadow-sm">
-                  ⌘K
-                </kbd>
-              </div>
             </div>
           </div>
 

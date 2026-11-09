@@ -1,7 +1,34 @@
-import { Clock, Filter, ArrowUpRight, Activity } from "lucide-react";
+import { useState } from "react";
+import {
+  Clock,
+  Filter,
+  ArrowUpRight,
+  Activity,
+  ChevronDown,
+  Check,
+  RotateCcw,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { formatDateTime, formatDate } from "@/lib/utils";
 import type { Attendance } from "@/types";
+
+type StatusFilter = "ALL" | "PRESENT" | "BREAK" | "CHECKOUT" | "ABSENCE";
+
+const FILTER_LABELS: Record<StatusFilter, string> = {
+  ALL: "Tous",
+  PRESENT: "Présent",
+  BREAK: "En Pause",
+  CHECKOUT: "Sortie",
+  ABSENCE: "Absence",
+};
 
 interface RecentActivityFeedProps {
   attendances?: Attendance[];
@@ -12,8 +39,30 @@ export function RecentActivityFeed({
   attendances = [],
   isLoading = false,
 }: RecentActivityFeedProps) {
-  // Take up to 5 most recent records
-  const recentAttendances = attendances.slice(0, 5);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+
+  function getItemStatus(
+    item: Attendance
+  ): "BREAK" | "CHECKOUT" | "PRESENT" | "ABSENCE" | "UNKNOWN" {
+    const activeBreak = item.breaks?.find((b) => b.start_time && !b.end_time);
+    if (activeBreak) return "BREAK";
+    if (item.check_out) return "CHECKOUT";
+    if (item.check_in) return "PRESENT";
+    if (
+      item.status === "ABSENT_JUSTIFIED" ||
+      item.status === "ABSENT_UNJUSTIFIED"
+    )
+      return "ABSENCE";
+    return "UNKNOWN";
+  }
+
+  // Filter before slicing so that limit of rows takes the filter into consideration
+  const filteredAttendances = attendances.filter((item) => {
+    if (statusFilter === "ALL") return true;
+    return getItemStatus(item) === statusFilter;
+  });
+
+  const recentAttendances = filteredAttendances.slice(0, 5);
 
   return (
     <Card className="border border-slate-200/90 bg-white shadow-sm">
@@ -26,14 +75,70 @@ export function RecentActivityFeed({
             Flux des pointages et présences en direct (Base de données réelle)
           </p>
         </div>
+
+        {/* Functional Filter Dropdown */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
-          >
-            <Filter className="h-3.5 w-3.5 text-slate-500" />
-            Filtrer
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition shadow-sm"
+              >
+                <Filter className="h-3.5 w-3.5 text-slate-500" />
+                <span>Filtre : {FILTER_LABELS[statusFilter]}</span>
+                <ChevronDown className="h-3 w-3 text-slate-400" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuLabel>Filtrer par statut</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("ALL")}
+                className="flex items-center justify-between"
+              >
+                <span>Tous les statuts</span>
+                {statusFilter === "ALL" && (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("PRESENT")}
+                className="flex items-center justify-between"
+              >
+                <span>Présent</span>
+                {statusFilter === "PRESENT" && (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("BREAK")}
+                className="flex items-center justify-between"
+              >
+                <span>En Pause</span>
+                {statusFilter === "BREAK" && (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("CHECKOUT")}
+                className="flex items-center justify-between"
+              >
+                <span>Sortie</span>
+                {statusFilter === "CHECKOUT" && (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("ABSENCE")}
+                className="flex items-center justify-between"
+              >
+                <span>Absence</span>
+                {statusFilter === "ABSENCE" && (
+                  <Check className="h-3.5 w-3.5 text-primary" />
+                )}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardHeader>
 
@@ -41,7 +146,10 @@ export function RecentActivityFeed({
         {isLoading ? (
           <div className="p-6 space-y-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="animate-pulse flex items-center justify-between">
+              <div
+                key={i}
+                className="animate-pulse flex items-center justify-between"
+              >
                 <div className="flex items-center gap-3">
                   <div className="h-9 w-9 rounded-full bg-slate-100" />
                   <div className="space-y-1.5">
@@ -53,7 +161,7 @@ export function RecentActivityFeed({
               </div>
             ))}
           </div>
-        ) : recentAttendances.length === 0 ? (
+        ) : attendances.length === 0 ? (
           <div className="p-10 text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-2">
               <Activity className="h-5 w-5 stroke-[1.8]" />
@@ -62,8 +170,25 @@ export function RecentActivityFeed({
               Aucune activité aujourd'hui
             </p>
             <p className="text-[11px] text-slate-400 mt-1 max-w-[240px] mx-auto">
-              Les pointages et présences apparaîtront ici dès que les employés débuteront leur journée.
+              Les pointages et présences apparaîtront ici dès que les employés
+              débuteront leur journée.
             </p>
+          </div>
+        ) : recentAttendances.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-xs font-bold text-slate-700">
+              Aucun résultat pour le filtre « {FILTER_LABELS[statusFilter]} »
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Aucun pointage ne correspond à ce filtre actuellement.
+            </p>
+            <button
+              onClick={() => setStatusFilter("ALL")}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-slate-50 transition"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Réinitialiser le filtre
+            </button>
           </div>
         ) : (
           recentAttendances.map((item) => {
@@ -78,13 +203,14 @@ export function RecentActivityFeed({
               item.employee?.department ||
               "Collaborateur";
 
-            const initials = employeeName
-              .split(" ")
-              .filter(Boolean)
-              .map((n: string) => n[0])
-              .join("")
-              .substring(0, 2)
-              .toUpperCase() || "EM";
+            const initials =
+              employeeName
+                .split(" ")
+                .filter(Boolean)
+                .map((n: string) => n[0])
+                .join("")
+                .substring(0, 2)
+                .toUpperCase() || "EM";
 
             // Determine status, action & badge
             const activeBreak = item.breaks?.find(
@@ -93,8 +219,11 @@ export function RecentActivityFeed({
 
             let statusLabel = "Présent";
             let actionText = "Arrivée pointée (Check-in)";
-            let timeText = item.check_in ? formatDateTime(item.check_in) : formatDate(item.date);
-            let badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80";
+            let timeText = item.check_in
+              ? formatDateTime(item.check_in)
+              : formatDate(item.date);
+            let badgeClass =
+              "bg-emerald-50 text-emerald-700 border-emerald-200/80";
             let avatarBg = "bg-blue-600 text-white";
 
             if (activeBreak) {
@@ -119,7 +248,8 @@ export function RecentActivityFeed({
               statusLabel = "PRÉSENT";
               actionText = `Arrivée pointée à ${formatDateTime(item.check_in)}`;
               timeText = formatDateTime(item.check_in);
-              badgeClass = "bg-emerald-50 text-emerald-700 border-emerald-200/80";
+              badgeClass =
+                "bg-emerald-50 text-emerald-700 border-emerald-200/80";
               avatarBg = "bg-emerald-600 text-white";
             } else if (item.status === "ABSENT_JUSTIFIED") {
               statusLabel = "JUSTIFIÉE";

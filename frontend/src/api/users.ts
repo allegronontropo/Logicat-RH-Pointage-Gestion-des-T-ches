@@ -55,8 +55,8 @@ export async function updateUser(id: number, payload: UserUpdatePayload): Promis
   return data;
 }
 
-export async function deactivateUser(id: number): Promise<UserDetail> {
-  const { data } = await apiClient.patch<UserDetail>(`/api/users/${id}/deactivate`);
+export async function deactivateUser(id: number): Promise<{ detail: string }> {
+  const { data } = await apiClient.patch<{ detail: string }>(`/api/users/${id}/deactivate`);
   return data;
 }
 
@@ -65,8 +65,11 @@ export async function activateUser(id: number): Promise<UserDetail> {
   return data;
 }
 
-export async function resetPassword(id: number, newPassword: string): Promise<void> {
-  await apiClient.patch(`/api/users/${id}/reset-password`, {
-    new_password: newPassword,
-  });
+export async function resetPassword(id: number, newPassword: string): Promise<UserDetail> {
+  const { data } = await apiClient.patch<UserDetail>(
+    `/api/users/${id}/reset-password`,
+    { new_password: newPassword },
+    { params: { new_password: newPassword } }
+  );
+  return data;
 }

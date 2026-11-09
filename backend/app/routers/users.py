@@ -28,6 +28,7 @@ from app.schemas.user import (
     UserUpdate,
     EmployeeProfileUpdate,
     UserReadDetail,
+    ResetPasswordRequest,
 )
 from app.schemas.auth import UserRead
 from app.services import user_service
@@ -155,9 +156,16 @@ def activate_user_endpoint(
 )
 def reset_password_endpoint(
     user_id: int,
-    new_password: str,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(require_admin)],
+    new_password: str | None = Query(default=None),
+    body: ResetPasswordRequest | None = None,
 ) -> UserRead:
-    user = user_service.reset_password(db, user_id, new_password)
+    pwd = (body.new_password if body else None) or new_password
+    if not pwd or len(pwd) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Le mot de passe doit comporter au moins 8 caractères.",
+        )
+    user = user_service.reset_password(db, user_id, pwd)
     return UserRead.model_validate(user)

@@ -42,6 +42,13 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class ResetPasswordRequest(BaseModel):
+    """Request body for PATCH /api/users/{id}/reset-password."""
+
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+
 class EmployeeProfileUpdate(BaseModel):
     """Request body for PATCH /api/employees/me/profile (employee edits own profile).
 
