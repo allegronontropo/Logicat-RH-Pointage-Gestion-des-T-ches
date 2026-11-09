@@ -15,6 +15,8 @@ import {
   TrendingUp,
   X,
   AlertTriangle,
+  ArrowRight,
+  User,
 } from "lucide-react";
 import {
   Table,
@@ -101,6 +103,13 @@ export default function TasksPage() {
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Modal: Reassign Task
+  const [reassignTaskId, setReassignTaskId] = useState<number | null>(null);
+  const [reassignEmployeeId, setReassignEmployeeId] = useState<string>("");
+  const [reassignEmployeeName, setReassignEmployeeName] = useState("");
+  const [showReassignDialog, setShowReassignDialog] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
   // 1. Fetch Employees for dropdown assignment
   const { data: users = [] } = useQuery({
     queryKey: ["admin-tasks-employees"],
@@ -145,12 +154,44 @@ export default function TasksPage() {
     return titleMatch || descMatch || assigneeMatch;
   });
 
+  // Build department map from employees
+  const deptMap = new Map<number, string>();
+  employees.forEach((emp) => {
+    const empId = emp.employee_profile?.id || emp.employee_id || emp.id;
+    const dept = emp.employee_profile?.department || emp.department || "Sans Département";
+    deptMap.set(empId, dept);
+  });
+
+  // Get department display name for a task
+  function getTaskDepartment(task: Task): string {
+    const empId = task.assignee?.employee_id || task.assigned_to;
+    return deptMap.get(empId) || "Sans Département";
+  }
+
+  // Group tasks by department
+  const groupedTasks = (() => {
+    const groups = new Map<string, Task[]>();
+    filteredTasks.forEach((t) => {
+      const dept = getTaskDepartment(t);
+      if (!groups.has(dept)) groups.set(dept, []);
+      groups.get(dept)!.push(t);
+    });
+    return Array.from(groups.entries()).map(([dept, tasks]) => ({ dept, tasks }));
+  })();
+
+  // Flatten groups into display items with sub-header rows
+  const displayItems: { type: "group" | "task"; dept?: string; task?: Task }[] = [];
+  groupedTasks.forEach(({ dept, tasks: deptTasks }) => {
+    displayItems.push({ type: "group", dept });
+    deptTasks.forEach((t) => displayItems.push({ type: "task", task: t }));
+  });
+
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, priorityFilter, statusFilter, assigneeFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
-  const paginatedTasks = filteredTasks.slice(
+  const totalPages = Math.max(1, Math.ceil(displayItems.length / PAGE_SIZE));
+  const paginatedItems = displayItems.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
@@ -297,6 +338,67 @@ export default function TasksPage() {
         message: typeof msg === "string" ? msg : "Opération refusée.",
       });
     } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  // ── Open Reassign Dialog ─────────────────────────────────────────
+  function handleOpenReassign(task: Task) {
+    setReassignTaskId(task.id);
+    setReassignEmployeeId(String(task.assigned_to));
+    const emp = employees.find(
+      (e) =>
+        (e.employee_profile?.id || e.employee_id || e.id) === task.assigned_to
+    );
+    setReassignEmployeeName(
+      emp ? `${emp.first_name} ${emp.last_name}` : `Employé #${task.assigned_to}`
+    );
+    setShowReassignDialog(true);
+  }
+
+  // ── Confirm Reassign (opens AlertDialog) ─────────────────────────
+  function handleConfirmReassign() {
+    if (!reassignTaskId) return;
+    const targetEmp = employees.find(
+      (e) =>
+        (e.employee_profile?.id || e.employee_id || e.id) ===
+        Number(reassignEmployeeId)
+    );
+    setReassignEmployeeName(
+      targetEmp ? `${targetEmp.first_name} ${targetEmp.last_name}` : ""
+    );
+    setShowReassignDialog(false);
+    setShowConfirmDialog(true);
+  }
+
+  // ── Submit Reassign (API call) ───────────────────────────────────
+  async function handleSubmitReassign() {
+    if (!reassignTaskId || !reassignEmployeeId) return;
+
+    setIsDeleting(true);
+    try {
+      await updateTask(reassignTaskId, {
+        assigned_to: Number(reassignEmployeeId),
+      });
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setFeedback({
+        type: "success",
+        message: "La tâche a été réassignée avec succès.",
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Erreur lors de la réassignation.";
+      setFeedback({
+        type: "error",
+        message: typeof msg === "string" ? msg : "Opération refusée.",
+      });
+    } finally {
+      setReassignTaskId(null);
+      setReassignEmployeeId("");
+      setReassignEmployeeName("");
+      setShowConfirmDialog(false);
       setIsDeleting(false);
     }
   }
@@ -606,8 +708,54 @@ export default function TasksPage() {
                   </Button>
                 </TableCell>
               </TableRow>
+            ) : displayItems.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-12">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-3">
+                    <CheckSquare className="h-6 w-6 stroke-[1.7]" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-800">
+                    Aucune tâche trouvée
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                    {searchQuery ||
+                    priorityFilter !== "ALL" ||
+                    statusFilter !== "ALL" ||
+                    assigneeFilter !== "ALL"
+                      ? "Aucune tâche ne correspond à vos filtres. Essayez d'ajuster ou de réinitialiser vos critères."
+                      : "Aucune tâche n'a été créée pour le moment."}
+                  </p>
+                  <Button
+                    onClick={handleOpenCreate}
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 text-xs font-semibold gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Créer la première tâche
+                  </Button>
+                </TableCell>
+              </TableRow>
             ) : (
-              paginatedTasks.map((task) => {
+              paginatedItems.map((item, idx) => {
+                // Department group sub-header
+                if (item.type === "group") {
+                  return (
+                    <TableRow
+                      key={`group-${item.dept}-${idx}`}
+                      className="bg-slate-100/50 text-slate-600 font-bold text-xs uppercase tracking-wider"
+                    >
+                      <TableCell colSpan={6}>
+                        <div className="flex items-center gap-2">
+                          <User className="h-3.5 w-3.5" />
+                          {item.dept}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
+                const task = item.task!;
                 const assigneeName = task.assignee
                   ? `${task.assignee.first_name} ${task.assignee.last_name}`
                   : `Employé #${task.assigned_to}`;
@@ -761,6 +909,14 @@ export default function TasksPage() {
                           </DropdownMenuItem>
 
                           <DropdownMenuItem
+                            onClick={() => handleOpenReassign(task)}
+                            className="gap-2 cursor-pointer text-primary hover:text-primary-800"
+                          >
+                            <User className="h-3.5 w-3.5 text-slate-500" />
+                            <span>Réassigner</span>
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem
                             onClick={() => setDeletingTask(task)}
                             destructive
                             className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
@@ -773,13 +929,13 @@ export default function TasksPage() {
                     </TableCell>
                   </TableRow>
                 );
-              })
+              });
             )}
           </TableBody>
         </Table>
 
         {/* Pagination Bar */}
-        {filteredTasks.length > 0 && (
+        {displayItems.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50/50">
             <p className="text-xs text-slate-500 font-medium">
               Affichage de{" "}
@@ -788,11 +944,11 @@ export default function TasksPage() {
               </span>{" "}
               à{" "}
               <span className="font-semibold text-slate-800">
-                {Math.min(currentPage * PAGE_SIZE, filteredTasks.length)}
+                {Math.min(currentPage * PAGE_SIZE, displayItems.length)}
               </span>{" "}
               sur{" "}
               <span className="font-semibold text-slate-800">
-                {filteredTasks.length}
+                {displayItems.length}
               </span>{" "}
               tâches
             </p>
@@ -1197,6 +1353,123 @@ export default function TasksPage() {
                   Supprimer définitivement
                 </>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MODAL 4: Reassign Task Dialog ─────────────────────────── */}
+      <Dialog
+        open={showReassignDialog}
+        onOpenChange={setShowReassignDialog}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
+                <User className="h-4 w-4" />
+              </div>
+              <DialogTitle>Réassigner la Tâche</DialogTitle>
+            </div>
+            <DialogDescription>
+              Sélectionnez le nouveau collaborateur responsable de cette tâche.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="reassign-emp" className="text-xs font-semibold text-slate-700">
+                Nouveau collaborateur *
+              </Label>
+              <select
+                id="reassign-emp"
+                required
+                value={reassignEmployeeId}
+                onChange={(e) => setReassignEmployeeId(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              >
+                <option value="" disabled>
+                  Choisir un collaborateur…
+                </option>
+                {employees.map((emp) => {
+                  const empId =
+                    emp.employee_profile?.id || emp.employee_id || emp.id;
+                  const dept =
+                    emp.employee_profile?.department || emp.department;
+                  return (
+                    <option key={emp.id} value={empId}>
+                      {emp.first_name} {emp.last_name}{" "}
+                      {dept ? `(${dept})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <DialogFooter className="pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowReassignDialog(false)}
+                className="text-xs"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleConfirmReassign}
+                disabled={!reassignEmployeeId}
+                className="bg-primary hover:bg-blue-800 text-white text-xs gap-1.5"
+              >
+                Confirmer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MODAL 5: Confirm Reassign AlertDialog ─────────────────── */}
+      <Dialog
+        open={showConfirmDialog}
+        onOpenChange={setShowConfirmDialog}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+              <DialogTitle>Confirmer la réassignation</DialogTitle>
+            </div>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir réassigner cette tâche à{" "}
+              <span className="font-semibold text-slate-900">
+                {reassignEmployeeName}
+              </span>
+              ?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfirmDialog(false)}
+              className="text-xs"
+            >
+              Non
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSubmitReassign}
+              disabled={!reassignTaskId}
+              className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
+            >
+              Oui
             </Button>
           </DialogFooter>
         </DialogContent>

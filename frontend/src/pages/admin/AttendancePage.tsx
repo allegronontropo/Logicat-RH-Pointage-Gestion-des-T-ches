@@ -12,6 +12,8 @@ import {
   Loader2,
   X,
   LogOut,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import {
   Table,
@@ -53,6 +55,10 @@ export default function AttendancePage() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
+
+  // Sort State
+  const [sortColumn, setSortColumn] = useState<"date" | "employee_name" | "presence_minutes" | "break_minutes" | "effective_minutes" | "status">("date");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // Notifications
   const [feedback, setFeedback] = useState<{
@@ -130,12 +136,40 @@ export default function AttendancePage() {
     return true;
   });
 
+  // Sort handler
+  function handleSort(column: string) {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column as any);
+      setSortDirection("asc");
+    }
+  }
+
+  // Apply sort to filtered data
+  const sortedAttendances = [...filteredAttendances].sort((a, b) => {
+    let aVal: any = a[sortColumn as keyof Attendance];
+    let bVal: any = b[sortColumn as keyof Attendance];
+
+    if (aVal == null) aVal = "";
+    if (bVal == null) bVal = "";
+
+    let cmp = 0;
+    if (typeof aVal === "string" && typeof bVal === "string") {
+      cmp = aVal.localeCompare(bVal);
+    } else {
+      cmp = Number(aVal || 0) - Number(bVal || 0);
+    }
+
+    return sortDirection === "asc" ? cmp : -cmp;
+  });
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedDate, selectedEmployeeId, statusFilter]);
+  }, [selectedDate, selectedEmployeeId, statusFilter, sortColumn, sortDirection]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredAttendances.length / PAGE_SIZE));
-  const paginatedAttendances = filteredAttendances.slice(
+  const totalPages = Math.max(1, Math.ceil(sortedAttendances.length / PAGE_SIZE));
+  const paginatedAttendances = sortedAttendances.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
@@ -524,14 +558,84 @@ export default function AttendancePage() {
         <Table>
           <TableHeader className="bg-slate-50/80">
             <TableRow>
-              <TableHead className="w-[220px]">Employé</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Arrivée / Départ</TableHead>
-              <TableHead className="min-w-[190px]">Pauses (Matin / Déj / Soir)</TableHead>
-              <TableHead>Présence</TableHead>
-              <TableHead>Pause Totale</TableHead>
-              <TableHead>Travail Effectif</TableHead>
-              <TableHead>Statut</TableHead>
+              <TableHead
+                className="w-[220px] cursor-pointer select-none hover:bg-slate-200 rounded"
+                onClick={() => handleSort("employee_name")}
+              >
+                <div className="flex items-center gap-1.5">
+                  Employé
+                  {sortColumn === "employee_name" && (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    )
+                  )}
+                </div>
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:bg-slate-200 rounded"
+                onClick={() => handleSort("date")}
+              >
+                <div className="flex items-center gap-1.5">
+                  Date
+                  {sortColumn === "date" && (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    )
+                  )}
+                </div>
+              </TableHead>
+              <TableHead className="cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("presence_minutes")}>
+                <div className="flex items-center gap-1.5">
+                  Présence
+                  {sortColumn === "presence_minutes" && (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    )
+                  )}
+                </div>
+              </TableHead>
+              <TableHead className="min-w-[190px] cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("break_minutes")}>
+                <div className="flex items-center gap-1.5">
+                  Pauses (Matin / Déj / Soir)
+                  {sortColumn === "break_minutes" && (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    )
+                  )}
+                </div>
+              </TableHead>
+              <TableHead className="cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("effective_minutes")}>
+                <div className="flex items-center gap-1.5">
+                  Travail Effectif
+                  {sortColumn === "effective_minutes" && (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    )
+                  )}
+                </div>
+              </TableHead>
+              <TableHead className="cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("status")}>
+                <div className="flex items-center gap-1.5">
+                  Statut
+                  {sortColumn === "status" && (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                    )
+                  )}
+                </div>
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
