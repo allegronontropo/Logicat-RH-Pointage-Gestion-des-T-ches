@@ -64,6 +64,7 @@ export default function TasksPage() {
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("ALL");
@@ -142,20 +143,6 @@ export default function TasksPage() {
       }),
   });
 
-  // Client-side text search (title + description)
-  const filteredTasks = tasks.filter((t) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const titleMatch = t.title.toLowerCase().includes(q);
-    const descMatch = t.description?.toLowerCase().includes(q);
-    const assigneeMatch = t.assignee
-      ? `${t.assignee.first_name} ${t.assignee.last_name}`
-          .toLowerCase()
-          .includes(q)
-      : false;
-    return titleMatch || descMatch || assigneeMatch;
-  });
-
   // Build department map from employees
   const deptMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -168,11 +155,55 @@ export default function TasksPage() {
     return map;
   }, [employees]);
 
+  // Extract unique departments from employees list
+  const departments = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((emp) => {
+      const dept = emp.employee_profile?.department || emp.department;
+      if (dept && dept.trim()) {
+        set.add(dept.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [employees]);
+
+  // Available employees filtered by selected department
+  const availableEmployees = useMemo(() => {
+    if (departmentFilter === "ALL") return employees;
+    return employees.filter((emp) => {
+      const dept =
+        emp.employee_profile?.department || emp.department || "Sans Département";
+      return dept === departmentFilter;
+    });
+  }, [employees, departmentFilter]);
+
   // Get department display name for a task
   function getTaskDepartment(task: Task): string {
     const empId = task.assignee?.employee_id || task.assigned_to;
     return deptMap.get(empId) || "Sans Département";
   }
+
+  // Client-side text search & department filter
+  const filteredTasks = tasks.filter((t) => {
+    // Filter by department
+    if (departmentFilter !== "ALL") {
+      const taskDept = getTaskDepartment(t);
+      if (taskDept !== departmentFilter) {
+        return false;
+      }
+    }
+
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const titleMatch = t.title.toLowerCase().includes(q);
+    const descMatch = t.description?.toLowerCase().includes(q);
+    const assigneeMatch = t.assignee
+      ? `${t.assignee.first_name} ${t.assignee.last_name}`
+          .toLowerCase()
+          .includes(q)
+      : false;
+    return titleMatch || descMatch || assigneeMatch;
+  });
 
   // Sort tasks by department (alphabetical, with 'Sans Département' last), then by id desc
   const sortedTasks = useMemo(() => {
@@ -190,7 +221,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, priorityFilter, statusFilter, assigneeFilter]);
+  }, [searchQuery, priorityFilter, statusFilter, departmentFilter, assigneeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(sortedTasks.length / PAGE_SIZE));
   const paginatedTasks = sortedTasks.slice(
@@ -547,10 +578,10 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* ── Filters Card (Search, Priority, Status, Assignee) ──── */}
+      {/* ── Filters Card (Search, Department, Priority, Status, Assignee) ── */}
       <Card className="border border-slate-200/90 bg-white shadow-sm">
         <CardContent className="p-4 sm:p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             {/* Search Input */}
             <div className="space-y-1.5">
               <Label htmlFor="task-search" className="text-xs font-semibold text-slate-700">
@@ -574,6 +605,29 @@ export default function TasksPage() {
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Filter Department */}
+            <div className="space-y-1.5">
+              <Label htmlFor="dept-filter" className="text-xs font-semibold text-slate-700">
+                Département
+              </Label>
+              <select
+                id="dept-filter"
+                value={departmentFilter}
+                onChange={(e) => {
+                  setDepartmentFilter(e.target.value);
+                  setAssigneeFilter("ALL");
+                }}
+                className="w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary h-9 font-medium"
+              >
+                <option value="ALL">Tous les départements</option>
+                {departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Filter Priority */}
@@ -618,12 +672,13 @@ export default function TasksPage() {
                 <Label htmlFor="assignee-filter" className="text-xs font-semibold text-slate-700">
                   Assigné à
                 </Label>
-                {(priorityFilter !== "ALL" || statusFilter !== "ALL" || assigneeFilter !== "ALL" || searchQuery) && (
+                {(priorityFilter !== "ALL" || statusFilter !== "ALL" || assigneeFilter !== "ALL" || departmentFilter !== "ALL" || searchQuery) && (
                   <button
                     onClick={() => {
                       setPriorityFilter("ALL");
                       setStatusFilter("ALL");
                       setAssigneeFilter("ALL");
+                      setDepartmentFilter("ALL");
                       setSearchQuery("");
                     }}
                     className="text-[10px] font-semibold text-primary hover:underline"
@@ -639,7 +694,7 @@ export default function TasksPage() {
                 className="w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary h-9 font-medium"
               >
                 <option value="ALL">Tous les collaborateurs</option>
-                {employees.map((emp) => {
+                {availableEmployees.map((emp) => {
                   const empId =
                     emp.employee_profile?.id || emp.employee_id || emp.id;
                   const dept =
@@ -712,7 +767,8 @@ export default function TasksPage() {
                     {searchQuery ||
                     priorityFilter !== "ALL" ||
                     statusFilter !== "ALL" ||
-                    assigneeFilter !== "ALL"
+                    assigneeFilter !== "ALL" ||
+                    departmentFilter !== "ALL"
                       ? "Aucune tâche ne correspond à vos filtres. Essayez d'ajuster ou de réinitialiser vos critères."
                       : "Aucune tâche n'a été créée pour le moment."}
                   </p>
@@ -740,7 +796,8 @@ export default function TasksPage() {
                     {searchQuery ||
                     priorityFilter !== "ALL" ||
                     statusFilter !== "ALL" ||
-                    assigneeFilter !== "ALL"
+                    assigneeFilter !== "ALL" ||
+                    departmentFilter !== "ALL"
                       ? "Aucune tâche ne correspond à vos filtres. Essayez d'ajuster ou de réinitialiser vos critères."
                       : "Aucune tâche n'a été créée pour le moment."}
                   </p>
