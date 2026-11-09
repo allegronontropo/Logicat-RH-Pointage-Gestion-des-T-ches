@@ -1,0 +1,234 @@
+"""
+app/routers/attendances.py
+--------------------------
+Attendance endpoints — mixed roles.
+
+Employee (via get_current_employee):
+  POST   /api/attendances/check-in
+  POST   /api/attendances/check-out
+  GET    /api/attendances/today
+  GET    /api/attendances/me
+
+Admin (via require_admin):
+  GET    /api/attendances                    List all attendance (filters: ?employee_id=, ?date_from=, ?date_to=)
+  POST   /api/attendances/absences           Declare an absence
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session, joinedload
+
+from app.core.dependencies import get_current_employee, get_current_user, require_admin, get_db
+from app.models.attendance import Attendance
+from app.models.employee import Employee
+from app.models.user import User
+from app.models.break_ import Break
+from app.schemas.attendance import AttendanceResponse, AbsenceCreate
+from app.services import attendance_service
+
+router = APIRouter(prefix="/api/attendances", tags=["attendances"])
+
+
+# ---------------------------------------------------------------------------
+# Employee endpoints
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/check-in",
+    response_model=AttendanceResponse,
+    summary="Check in",
+    description="Employee checks in for today. Creates an attendance record.",
+    status_code=status.HTTP_201_CREATED,
+)
+def check_in_endpoint(
+    db: Annotated[Session, Depends(get_db)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
+) -> AttendanceResponse:
+    attendance = attendance_service.check_in(db, current_employee.id)
+    attendance = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(Attendance.id == attendance.id)
+        .first()
+    )
+    return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.post(
+    "/check-out",
+    response_model=AttendanceResponse,
+    summary="Check out",
+    description="Employee checks out for today. Blocked if a break is active.",
+)
+def check_out_endpoint(
+    db: Annotated[Session, Depends(get_db)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
+) -> AttendanceResponse:
+    attendance = attendance_service.check_out(db, current_employee.id)
+    attendance = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(Attendance.id == attendance.id)
+        .first()
+    )
+    return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.get(
+    "/today",
+    response_model=AttendanceResponse,
+    summary="Get today's attendance",
+    description="Returns today's attendance record with breaks and computed durations.",
+)
+def get_today_endpoint(
+    db: Annotated[Session, Depends(get_db)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
+) -> AttendanceResponse:
+    today = attendance_service._today()
+    attendance = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(
+            Attendance.employee_id == current_employee.id,
+            Attendance.date == today,
+        )
+        .first()
+    )
+    if attendance is None:
+        # Return an empty response rather than 404 (per T15 in PROJECT_PLAN)
+        from app.schemas.attendance import BreakSummary
+        return AttendanceResponse(
+            id=0,
+            employee_id=current_employee.id,
+            date=today,
+            status="NOT_CHECKED_IN",
+            breaks=[],
+        )
+    return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.get(
+    "/me",
+    response_model=list[AttendanceResponse],
+    summary="Get my attendance history",
+    description="Returns the employee's attendance history with optional date filters.",
+)
+def get_my_attendance(
+    db: Annotated[Session, Depends(get_db)],
+    current_employee: Annotated[Employee, Depends(get_current_employee)],
+    date_from: date | None = Query(default=None, description="Start date (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="End date (YYYY-MM-DD)"),
+) -> list[AttendanceResponse]:
+    query = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(Attendance.employee_id == current_employee.id)
+    )
+    if date_from:
+        query = query.filter(Attendance.date >= date_from)
+    if date_to:
+        query = query.filter(Attendance.date <= date_to)
+
+    attendances = query.order_by(Attendance.date.desc()).all()
+    return [AttendanceResponse.from_orm_with_durations(a) for a in attendances]
+
+
+# ---------------------------------------------------------------------------
+# Admin endpoints
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/",
+    response_model=list[AttendanceResponse],
+    summary="List all attendance",
+    description="Admin: list all attendance records with optional filters.",
+)
+def list_all_attendance(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+    employee_id: int | None = Query(default=None, description="Filter by employee ID"),
+    date_from: date | None = Query(default=None, description="Start date (YYYY-MM-DD)"),
+    date_to: date | None = Query(default=None, description="End date (YYYY-MM-DD)"),
+) -> list[AttendanceResponse]:
+    query = db.query(Attendance).options(joinedload(Attendance.breaks))
+
+    if employee_id:
+        query = query.filter(Attendance.employee_id == employee_id)
+    if date_from:
+        query = query.filter(Attendance.date >= date_from)
+    if date_to:
+        query = query.filter(Attendance.date <= date_to)
+
+    attendances = query.order_by(Attendance.date.desc()).all()
+    return [AttendanceResponse.from_orm_with_durations(a) for a in attendances]
+
+
+@router.post(
+    "/absences",
+    response_model=AttendanceResponse,
+    summary="Declare absence",
+    description="Admin declares a justified or unjustified absence for an employee on a date.",
+    status_code=status.HTTP_201_CREATED,
+)
+def declare_absence_endpoint(
+    absence_data: AbsenceCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+) -> AttendanceResponse:
+    attendance = attendance_service.declare_absence(
+        db,
+        employee_id=absence_data.employee_id,
+        absence_date=absence_data.date,
+        status=absence_data.status,
+        justification_note=absence_data.justification_note,
+    )
+    attendance = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(Attendance.id == attendance.id)
+        .first()
+    )
+    return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.get(
+    "/{attendance_id}",
+    response_model=AttendanceResponse,
+    summary="Get attendance by ID",
+    description="Get an attendance record by ID. Employees can only see their own; admins can see all.",
+)
+def get_attendance_by_id(
+    attendance_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> AttendanceResponse:
+    attendance = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(Attendance.id == attendance_id)
+        .first()
+    )
+    if attendance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance not found",
+        )
+
+    # IDOR: employees can only see their own attendance
+    if current_user.role == "EMPLOYEE":
+        employee = (
+            db.query(Employee)
+            .filter(Employee.user_id == current_user.id)
+            .first()
+        )
+        if employee is None or attendance.employee_id != employee.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Attendance not found",
+            )
+
+    return AttendanceResponse.from_orm_with_durations(attendance)
