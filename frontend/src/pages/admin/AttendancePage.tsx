@@ -45,6 +45,7 @@ import {
 } from "@/api/attendances";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Attendance, BreakSummary } from "@/types";
+import { EmployeeCombobox, type EmployeeOption } from "@/components/shared/EmployeeCombobox";
 
 export default function AttendancePage() {
   const queryClient = useQueryClient();
@@ -105,6 +106,18 @@ export default function AttendancePage() {
   });
 
   const employees = users.filter((u) => u.role === "EMPLOYEE");
+
+  // Convert to EmployeeOption shape for the combobox
+  const employeeOptions: EmployeeOption[] = useMemo(
+    () =>
+      employees.map((emp) => ({
+        id: emp.employee_profile?.id || emp.employee_id || emp.id,
+        firstName: emp.first_name,
+        lastName: emp.last_name,
+        department: emp.employee_profile?.department || emp.department || undefined,
+      })),
+    [employees]
+  );
 
   // 2. Fetch Attendance Records with filters
   const {
@@ -1023,25 +1036,11 @@ export default function AttendancePage() {
               <Label htmlFor="abs-emp" className="text-xs font-semibold text-slate-700">
                 Collaborateur *
               </Label>
-              <select
-                id="abs-emp"
-                required
-                value={absenceEmployeeId}
-                onChange={(e) => setAbsenceEmployeeId(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
-              >
-                {employees.map((emp) => {
-                  const empId =
-                    emp.employee_profile?.id || emp.employee_id || emp.id;
-                  const dept =
-                    emp.employee_profile?.department || emp.department;
-                  return (
-                    <option key={emp.id} value={empId}>
-                      {emp.first_name} {emp.last_name} {dept ? `(${dept})` : ""}
-                    </option>
-                  );
-                })}
-              </select>
+              <EmployeeCombobox
+                value={absenceEmployeeId ? Number(absenceEmployeeId) : 0}
+                onChange={(id) => setAbsenceEmployeeId(String(id))}
+                employees={employeeOptions}
+              />
             </div>
 
             {/* Multi-Day Dates: Date de début and Date de fin */}

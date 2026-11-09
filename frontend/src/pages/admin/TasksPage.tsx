@@ -58,6 +58,7 @@ import {
 import { listUsers } from "@/api/users";
 import { formatDate } from "@/lib/utils";
 import type { Task } from "@/types";
+import { EmployeeCombobox, type EmployeeOption } from "@/components/shared/EmployeeCombobox";
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
@@ -120,6 +121,18 @@ export default function TasksPage() {
   });
 
   const employees = users.filter((u) => u.role === "EMPLOYEE");
+
+  // Convert employees to EmployeeOption shape for the combobox
+  const employeeOptions: EmployeeOption[] = useMemo(
+    () =>
+      employees.map((emp) => ({
+        id: emp.employee_profile?.id || emp.employee_id || emp.id,
+        firstName: emp.first_name,
+        lastName: emp.last_name,
+        department: emp.employee_profile?.department || emp.department || undefined,
+      })),
+    [employees]
+  );
 
   // 2. Fetch Tasks with query filters
   const {
@@ -1122,34 +1135,13 @@ export default function TasksPage() {
                 <Label htmlFor="task-assignee" className="text-xs font-semibold text-slate-700">
                   Assigné à *
                 </Label>
-                <select
-                  id="task-assignee"
-                  required
+                <EmployeeCombobox
                   value={createForm.assigned_to}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      assigned_to: Number(e.target.value),
-                    })
+                  onChange={(id) =>
+                    setCreateForm({ ...createForm, assigned_to: id })
                   }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
-                >
-                  <option value={0} disabled>
-                    Choisir un collaborateur...
-                  </option>
-                  {employees.map((emp) => {
-                    const empId =
-                      emp.employee_profile?.id || emp.employee_id || emp.id;
-                    const dept =
-                      emp.employee_profile?.department || emp.department;
-                    return (
-                      <option key={emp.id} value={empId}>
-                        {emp.first_name} {emp.last_name}{" "}
-                        {dept ? `(${dept})` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
+                  employees={employeeOptions}
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -1288,30 +1280,13 @@ export default function TasksPage() {
                 <Label htmlFor="edit-task-assignee" className="text-xs font-semibold text-slate-700">
                   Assigné à *
                 </Label>
-                <select
-                  id="edit-task-assignee"
+                <EmployeeCombobox
                   value={editForm.assigned_to || 0}
-                  onChange={(e) =>
-                    setEditForm({
-                      ...editForm,
-                      assigned_to: Number(e.target.value),
-                    })
+                  onChange={(id) =>
+                    setEditForm({ ...editForm, assigned_to: id })
                   }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
-                >
-                  {employees.map((emp) => {
-                    const empId =
-                      emp.employee_profile?.id || emp.employee_id || emp.id;
-                    const dept =
-                      emp.employee_profile?.department || emp.department;
-                    return (
-                      <option key={emp.id} value={empId}>
-                        {emp.first_name} {emp.last_name}{" "}
-                        {dept ? `(${dept})` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
+                  employees={employeeOptions}
+                />
               </div>
 
               <div className="space-y-1.5">
