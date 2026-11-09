@@ -32,6 +32,37 @@ from app.models.employee import Employee
 
 DEMO_ACCOUNTS = [
     {
+        "email": "admin1@logicat.eu",
+        "password": "Admin123!",
+        "first_name": "Admin",
+        "last_name": "One",
+        "role": "ADMIN_RH",
+        "phone": "+212 600 000 001",
+        "employee": None,
+    },
+    {
+        "email": "admin2@logicat.eu",
+        "password": "Admin123!",
+        "first_name": "Admin",
+        "last_name": "Two",
+        "role": "ADMIN_RH",
+        "phone": "+212 600 000 002",
+        "employee": None,
+    },
+    {
+        "email": "ybadri@logicat.eu",
+        "password": "Emp123!",
+        "first_name": "Youssef",
+        "last_name": "Badri",
+        "role": "EMPLOYEE",
+        "phone": "+212 600 000 003",
+        "employee": {
+            "department": "IT",
+            "position": "Dev",
+            "hire_date": None,
+        },
+    },
+    {
         "email": "admin1@logicat.ma",
         "password": "Admin123!",
         "first_name": "Admin",

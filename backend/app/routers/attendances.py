@@ -154,7 +154,10 @@ def list_all_attendance(
     date_from: date | None = Query(default=None, description="Start date (YYYY-MM-DD)"),
     date_to: date | None = Query(default=None, description="End date (YYYY-MM-DD)"),
 ) -> list[AttendanceResponse]:
-    query = db.query(Attendance).options(joinedload(Attendance.breaks))
+    query = db.query(Attendance).options(
+        joinedload(Attendance.breaks),
+        joinedload(Attendance.employee).joinedload(Employee.user),
+    )
 
     if employee_id:
         query = query.filter(Attendance.employee_id == employee_id)

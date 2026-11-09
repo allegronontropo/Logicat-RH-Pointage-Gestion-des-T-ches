@@ -6,6 +6,7 @@ Pydantic schemas for authentication.
 
 from __future__ import annotations
 
+from datetime import date
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -14,6 +15,17 @@ class LoginRequest(BaseModel):
 
     email: EmailStr
     password: str = Field(min_length=1)
+
+
+class EmployeeProfileRead(BaseModel):
+    """Employee profile summary for authenticated user."""
+
+    id: int
+    department: str | None = None
+    position: str | None = None
+    hire_date: date | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class UserRead(BaseModel):
@@ -25,6 +37,7 @@ class UserRead(BaseModel):
     last_name: str
     role: str
     is_active: bool
+    employee_profile: EmployeeProfileRead | None = None
 
     model_config = {"from_attributes": True}
 

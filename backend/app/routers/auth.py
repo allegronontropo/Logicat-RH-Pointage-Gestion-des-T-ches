@@ -12,15 +12,35 @@ Endpoints:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core import security
 from app.core.dependencies import get_current_user
 from app.database.session import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, TokenResponse, UserRead
+from app.schemas.auth import LoginRequest, TokenResponse, UserRead, EmployeeProfileRead
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _build_user_read(user: User) -> UserRead:
+    employee_profile = None
+    if user.employee:
+        employee_profile = EmployeeProfileRead(
+            id=user.employee.id,
+            department=user.employee.department,
+            position=user.employee.position,
+            hire_date=user.employee.hire_date,
+        )
+    return UserRead(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        role=user.role,
+        is_active=user.is_active,
+        employee_profile=employee_profile,
+    )
 
 
 @router.post(
@@ -38,7 +58,12 @@ def login(
     Raises HTTP 401 if the email is not found, the password is wrong,
     or the account is deactivated.
     """
-    user = db.query(User).filter(User.email == login_data.email).first()
+    user = (
+        db.query(User)
+        .options(joinedload(User.employee))
+        .filter(User.email == login_data.email)
+        .first()
+    )
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -61,7 +86,7 @@ def login(
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=UserRead.model_validate(user),
+        user=_build_user_read(user),
     )
 
 
@@ -75,7 +100,7 @@ def me(
     current_user: User = Depends(get_current_user),
 ) -> UserRead:
     """Return the currently authenticated user."""
-    return UserRead.model_validate(current_user)
+    return _build_user_read(current_user)
 
 
 @router.post(

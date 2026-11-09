@@ -26,11 +26,25 @@ class BreakSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class EmployeeSummary(BaseModel):
+    """Employee summary info for attendance list."""
+
+    id: int
+    first_name: str
+    last_name: str
+    department: str | None = None
+    position: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class AttendanceResponse(BaseModel):
-    """Response body for attendance endpoints, including computed durations."""
+    """Response body for attendance endpoints, including computed durations and employee info."""
 
     id: int
     employee_id: int
+    employee_name: str | None = None
+    employee: EmployeeSummary | None = None
     date: date
     check_in: datetime | None = None
     check_out: datetime | None = None
@@ -52,9 +66,25 @@ class AttendanceResponse(BaseModel):
         presence_minutes, break_minutes, effective_minutes = calculate_durations(
             attendance
         )
+
+        employee_summary = None
+        employee_name = None
+        if attendance.employee and attendance.employee.user:
+            u = attendance.employee.user
+            employee_name = f"{u.first_name} {u.last_name}"
+            employee_summary = EmployeeSummary(
+                id=attendance.employee.id,
+                first_name=u.first_name,
+                last_name=u.last_name,
+                department=attendance.employee.department,
+                position=attendance.employee.position,
+            )
+
         return cls(
             id=attendance.id,
             employee_id=attendance.employee_id,
+            employee_name=employee_name,
+            employee=employee_summary,
             date=attendance.date,
             check_in=attendance.check_in,
             check_out=attendance.check_out,

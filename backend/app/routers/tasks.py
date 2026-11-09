@@ -29,6 +29,17 @@ from app.models.employee import Employee
 from app.models.user import User
 from app.schemas.task import TaskCreate, TaskUpdate, TaskStatusUpdate, TaskResponse
 
+# Helper: load task with employee + user for name display
+def _load_task_with_assignee(db: Session, task_id: int) -> Task | None:
+    return (
+        db.query(Task)
+        .options(
+            joinedload(Task.employee).joinedload(Employee.user)
+        )
+        .filter(Task.id == task_id)
+        .first()
+    )
+
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
@@ -67,8 +78,9 @@ def create_task_endpoint(
     )
     db.add(task)
     db.commit()
-    db.refresh(task)
-    return TaskResponse.model_validate(task)
+    # Reload with assignee join so the response includes the employee's name
+    task = _load_task_with_assignee(db, task.id)
+    return TaskResponse.from_orm_with_assignee(task)
 
 
 @router.get(
@@ -84,7 +96,9 @@ def list_tasks_admin(
     priority: str | None = Query(default=None, description="Filter by priority"),
     status: str | None = Query(default=None, description="Filter by status"),
 ) -> list[TaskResponse]:
-    query = db.query(Task).options(joinedload(Task.employee))
+    query = db.query(Task).options(
+        joinedload(Task.employee).joinedload(Employee.user)
+    )
 
     if assigned_to:
         query = query.filter(Task.assigned_to == assigned_to)
@@ -94,7 +108,7 @@ def list_tasks_admin(
         query = query.filter(Task.status == status)
 
     tasks = query.order_by(Task.id.desc()).all()
-    return [TaskResponse.model_validate(t) for t in tasks]
+    return [TaskResponse.from_orm_with_assignee(t) for t in tasks]
 
 
 @router.put(
@@ -121,8 +135,9 @@ def update_task_endpoint(
         setattr(task, field, value)
 
     db.commit()
-    db.refresh(task)
-    return TaskResponse.model_validate(task)
+    # Reload with assignee join so the response includes the employee's name
+    task = _load_task_with_assignee(db, task.id)
+    return TaskResponse.from_orm_with_assignee(task)
 
 
 @router.delete(
@@ -163,7 +178,9 @@ def get_my_tasks(
     priority: str | None = Query(default=None, description="Filter by priority"),
     status: str | None = Query(default=None, description="Filter by status"),
 ) -> list[TaskResponse]:
-    query = db.query(Task).filter(Task.assigned_to == current_employee.id)
+    query = db.query(Task).options(
+        joinedload(Task.employee).joinedload(Employee.user)
+    ).filter(Task.assigned_to == current_employee.id)
 
     if priority:
         query = query.filter(Task.priority == priority)
@@ -171,7 +188,7 @@ def get_my_tasks(
         query = query.filter(Task.status == status)
 
     tasks = query.order_by(Task.id.desc()).all()
-    return [TaskResponse.model_validate(t) for t in tasks]
+    return [TaskResponse.from_orm_with_assignee(t) for t in tasks]
 
 
 @router.get(
@@ -197,7 +214,8 @@ def get_task_by_id_employee(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
-    return TaskResponse.model_validate(task)
+    task = _load_task_with_assignee(db, task.id)
+    return TaskResponse.from_orm_with_assignee(task)
 
 
 @router.patch(
@@ -227,5 +245,5 @@ def update_task_status_endpoint(
 
     task.status = status_data.status
     db.commit()
-    db.refresh(task)
-    return TaskResponse.model_validate(task)
+    task = _load_task_with_assignee(db, task.id)
+    return TaskResponse.from_orm_with_assignee(task)
