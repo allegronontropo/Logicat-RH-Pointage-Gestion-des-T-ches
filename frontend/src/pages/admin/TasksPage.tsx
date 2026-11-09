@@ -180,6 +180,18 @@ export default function TasksPage() {
     });
   }, [employees, departmentFilter]);
 
+  // Available employees mapped to EmployeeOption shape for combobox
+  const availableEmployeeOptions: EmployeeOption[] = useMemo(
+    () =>
+      availableEmployees.map((emp) => ({
+        id: emp.employee_profile?.id || emp.employee_id || emp.id,
+        firstName: emp.first_name,
+        lastName: emp.last_name,
+        department: emp.employee_profile?.department || emp.department || undefined,
+      })),
+    [availableEmployees]
+  );
+
   // Get department display name for a task
   function getTaskDepartment(task: Task): string {
     const empId = task.assignee?.employee_id || task.assigned_to;
@@ -635,25 +647,13 @@ export default function TasksPage() {
                   </button>
                 )}
               </div>
-              <select
-                id="assignee-filter"
+              <EmployeeCombobox
                 value={assigneeFilter}
-                onChange={(e) => setAssigneeFilter(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary h-9 font-medium"
-              >
-                <option value="ALL">Tous les collaborateurs</option>
-                {availableEmployees.map((emp) => {
-                  const empId =
-                    emp.employee_profile?.id || emp.employee_id || emp.id;
-                  const dept =
-                    emp.employee_profile?.department || emp.department;
-                  return (
-                    <option key={emp.id} value={empId}>
-                      {emp.first_name} {emp.last_name} {dept ? `(${dept})` : ""}
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={(val) => setAssigneeFilter(val ? String(val) : "ALL")}
+                employees={availableEmployeeOptions}
+                showAllOption={true}
+                className="bg-slate-50/70 font-medium"
+              />
             </div>
           </div>
         </CardContent>

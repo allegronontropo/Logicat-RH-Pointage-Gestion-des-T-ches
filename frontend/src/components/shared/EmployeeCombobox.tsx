@@ -20,15 +20,19 @@ export interface EmployeeOption {
 }
 
 interface EmployeeComboboxProps {
-  /** Currently selected employee ID (0 or "" means none selected) */
-  value: number | string;
-  /** Called with the new employee's id when a selection changes */
-  onChange: (id: number) => void;
+  /** Currently selected employee ID (0, "ALL", "", or null means none/all selected) */
+  value?: number | string | null;
+  /** Called with the new employee's id (or null when 'Tous les collaborateurs' is selected) */
+  onChange: (id: any) => void;
   employees: EmployeeOption[];
   placeholder?: string;
   disabled?: boolean;
   /** Extra class applied to the trigger button */
   className?: string;
+  /** If true, renders a "Tous les collaborateurs" item at the top */
+  showAllOption?: boolean;
+  /** Custom label for the all option (defaults to "Tous les collaborateurs") */
+  allOptionLabel?: string;
 }
 
 export function EmployeeCombobox({
@@ -38,15 +42,22 @@ export function EmployeeCombobox({
   placeholder = "Choisir un collaborateur...",
   disabled = false,
   className,
+  showAllOption = false,
+  allOptionLabel = "Tous les collaborateurs",
 }: EmployeeComboboxProps) {
   const [open, setOpen] = useState(false);
 
-  const selectedEmployee = employees.find((emp) => emp.id === Number(value));
+  const isAllSelected = !value || value === "ALL" || value === 0 || value === "0";
+  const selectedEmployee = !isAllSelected
+    ? employees.find((emp) => emp.id === Number(value))
+    : null;
 
   const displayLabel = selectedEmployee
     ? `${selectedEmployee.firstName} ${selectedEmployee.lastName}${
         selectedEmployee.department ? ` (${selectedEmployee.department})` : ""
       }`
+    : showAllOption
+    ? allOptionLabel
     : placeholder;
 
   return (
@@ -59,7 +70,7 @@ export function EmployeeCombobox({
           disabled={disabled}
           className={cn(
             "flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50",
-            !selectedEmployee && "text-slate-400",
+            !selectedEmployee && !showAllOption && "text-slate-400",
             className
           )}
         >
@@ -68,11 +79,12 @@ export function EmployeeCombobox({
         </button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[300px] p-0">
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[280px] p-0">
         <Command
-          filter={(value, search) => {
-            // value is the data-value we set on CommandItem (name + dept)
-            if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+          filter={(itemValue, search) => {
+            if (!search.trim()) return 1;
+            // Case-insensitive substring match
+            if (itemValue.toLowerCase().includes(search.toLowerCase())) return 1;
             return 0;
           }}
         >
@@ -80,15 +92,34 @@ export function EmployeeCombobox({
           <CommandList>
             <CommandEmpty>Aucun employé trouvé.</CommandEmpty>
             <CommandGroup>
+              {showAllOption && (
+                <CommandItem
+                  key="all"
+                  value={allOptionLabel}
+                  onSelect={() => {
+                    onChange(null);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-3.5 w-3.5 text-primary",
+                      isAllSelected || !selectedEmployee ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <span className="font-medium text-slate-800">
+                    {allOptionLabel}
+                  </span>
+                </CommandItem>
+              )}
               {employees.map((emp) => {
                 const label = `${emp.firstName} ${emp.lastName}${
                   emp.department ? ` (${emp.department})` : ""
                 }`;
-                const isSelected = emp.id === Number(value);
+                const isSelected = selectedEmployee?.id === emp.id;
                 return (
                   <CommandItem
                     key={emp.id}
-                    // data-value used by the filter function above
                     value={label}
                     onSelect={() => {
                       onChange(emp.id);

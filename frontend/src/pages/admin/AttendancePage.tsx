@@ -526,30 +526,18 @@ export default function AttendancePage() {
               </div>
             </div>
 
-            {/* Filter 2: Employee Select */}
+            {/* Filter 2: Employee Combobox */}
             <div className="space-y-1.5">
-              <Label htmlFor="emp-filter" className="text-xs font-semibold text-slate-700">
+              <Label className="text-xs font-semibold text-slate-700">
                 Collaborateur
               </Label>
-              <select
-                id="emp-filter"
+              <EmployeeCombobox
                 value={selectedEmployeeId}
-                onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                className="w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary h-9 font-medium"
-              >
-                <option value="ALL">Tous les collaborateurs</option>
-                {employees.map((emp) => {
-                  const empId =
-                    emp.employee_profile?.id || emp.employee_id || emp.id;
-                  const dept =
-                    emp.employee_profile?.department || emp.department;
-                  return (
-                    <option key={emp.id} value={empId}>
-                      {emp.first_name} {emp.last_name} {dept ? `(${dept})` : ""}
-                    </option>
-                  );
-                })}
-              </select>
+                onChange={(val) => setSelectedEmployeeId(val ? String(val) : "ALL")}
+                employees={employeeOptions}
+                showAllOption={true}
+                className="bg-slate-50/70 font-medium"
+              />
             </div>
 
             {/* Filter 3: Status Filter */}
