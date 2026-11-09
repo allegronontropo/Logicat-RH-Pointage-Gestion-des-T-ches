@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckSquare,
@@ -15,8 +15,9 @@ import {
   TrendingUp,
   X,
   AlertTriangle,
-  ArrowRight,
   User,
+  Building2,
+  UserCheck,
 } from "lucide-react";
 import {
   Table,
@@ -109,6 +110,7 @@ export default function TasksPage() {
   const [reassignEmployeeName, setReassignEmployeeName] = useState("");
   const [showReassignDialog, setShowReassignDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [isReassigning, setIsReassigning] = useState(false);
 
   // 1. Fetch Employees for dropdown assignment
   const { data: users = [] } = useQuery({
@@ -155,12 +157,16 @@ export default function TasksPage() {
   });
 
   // Build department map from employees
-  const deptMap = new Map<number, string>();
-  employees.forEach((emp) => {
-    const empId = emp.employee_profile?.id || emp.employee_id || emp.id;
-    const dept = emp.employee_profile?.department || emp.department || "Sans Département";
-    deptMap.set(empId, dept);
-  });
+  const deptMap = useMemo(() => {
+    const map = new Map<number, string>();
+    employees.forEach((emp) => {
+      const empId = emp.employee_profile?.id || emp.employee_id || emp.id;
+      const dept =
+        emp.employee_profile?.department || emp.department || "Sans Département";
+      map.set(empId, dept);
+    });
+    return map;
+  }, [employees]);
 
   // Get department display name for a task
   function getTaskDepartment(task: Task): string {
@@ -168,33 +174,44 @@ export default function TasksPage() {
     return deptMap.get(empId) || "Sans Département";
   }
 
-  // Group tasks by department
-  const groupedTasks = (() => {
-    const groups = new Map<string, Task[]>();
-    filteredTasks.forEach((t) => {
-      const dept = getTaskDepartment(t);
-      if (!groups.has(dept)) groups.set(dept, []);
-      groups.get(dept)!.push(t);
+  // Sort tasks by department (alphabetical, with 'Sans Département' last), then by id desc
+  const sortedTasks = useMemo(() => {
+    return [...filteredTasks].sort((a, b) => {
+      const deptA = getTaskDepartment(a);
+      const deptB = getTaskDepartment(b);
+      if (deptA !== deptB) {
+        if (deptA === "Sans Département") return 1;
+        if (deptB === "Sans Département") return -1;
+        return deptA.localeCompare(deptB, "fr");
+      }
+      return b.id - a.id;
     });
-    return Array.from(groups.entries()).map(([dept, tasks]) => ({ dept, tasks }));
-  })();
-
-  // Flatten groups into display items with sub-header rows
-  const displayItems: { type: "group" | "task"; dept?: string; task?: Task }[] = [];
-  groupedTasks.forEach(({ dept, tasks: deptTasks }) => {
-    displayItems.push({ type: "group", dept });
-    deptTasks.forEach((t) => displayItems.push({ type: "task", task: t }));
-  });
+  }, [filteredTasks, deptMap]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, priorityFilter, statusFilter, assigneeFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(displayItems.length / PAGE_SIZE));
-  const paginatedItems = displayItems.slice(
+  const totalPages = Math.max(1, Math.ceil(sortedTasks.length / PAGE_SIZE));
+  const paginatedTasks = sortedTasks.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
+
+  // Group the paginated tasks by department for the current page view
+  const pageGroups = useMemo(() => {
+    const groups: { department: string; tasks: Task[] }[] = [];
+    paginatedTasks.forEach((task) => {
+      const dept = getTaskDepartment(task);
+      const last = groups[groups.length - 1];
+      if (last && last.department === dept) {
+        last.tasks.push(task);
+      } else {
+        groups.push({ department: dept, tasks: [task] });
+      }
+    });
+    return groups;
+  }, [paginatedTasks, deptMap]);
 
   // Task KPI counts
   const totalCount = tasks.length;
@@ -375,16 +392,18 @@ export default function TasksPage() {
   async function handleSubmitReassign() {
     if (!reassignTaskId || !reassignEmployeeId) return;
 
-    setIsDeleting(true);
+    setIsReassigning(true);
     try {
       await updateTask(reassignTaskId, {
         assigned_to: Number(reassignEmployeeId),
       });
       await refetch();
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setFeedback({
         type: "success",
-        message: "La tâche a été réassignée avec succès.",
+        message: `La tâche a été réassignée avec succès à ${reassignEmployeeName}.`,
       });
     } catch (err: unknown) {
       const msg =
@@ -399,7 +418,7 @@ export default function TasksPage() {
       setReassignEmployeeId("");
       setReassignEmployeeName("");
       setShowConfirmDialog(false);
-      setIsDeleting(false);
+      setIsReassigning(false);
     }
   }
 
@@ -708,7 +727,7 @@ export default function TasksPage() {
                   </Button>
                 </TableCell>
               </TableRow>
-            ) : displayItems.length === 0 ? (
+            ) : sortedTasks.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-12">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-3">
@@ -737,25 +756,27 @@ export default function TasksPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              paginatedItems.map((item, idx) => {
-                // Department group sub-header
-                if (item.type === "group") {
-                  return (
-                    <TableRow
-                      key={`group-${item.dept}-${idx}`}
-                      className="bg-slate-100/50 text-slate-600 font-bold text-xs uppercase tracking-wider"
-                    >
-                      <TableCell colSpan={6}>
-                        <div className="flex items-center gap-2">
-                          <User className="h-3.5 w-3.5" />
-                          {item.dept}
+              pageGroups.map((group) => (
+                <React.Fragment key={`dept-group-${group.department}`}>
+                  {/* Department Group Sub-Header */}
+                  <TableRow className="bg-slate-50/90 border-y border-slate-200/90 hover:bg-slate-50/90">
+                    <TableCell colSpan={6} className="py-2.5 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-100 text-blue-700 shadow-2xs">
+                          <Building2 className="h-3.5 w-3.5" />
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                }
+                        <span className="text-xs font-bold text-slate-800 tracking-wide">
+                          {group.department}
+                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 shadow-2xs">
+                          {group.tasks.length} {group.tasks.length > 1 ? "tâches" : "tâche"}
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
 
-                const task = item.task!;
+                  {/* Tasks under this department */}
+                  {group.tasks.map((task) => {
                 const assigneeName = task.assignee
                   ? `${task.assignee.first_name} ${task.assignee.last_name}`
                   : `Employé #${task.assigned_to}`;
@@ -929,13 +950,15 @@ export default function TasksPage() {
                     </TableCell>
                   </TableRow>
                 );
-              });
-            )}
-          </TableBody>
-        </Table>
+              })}
+            </React.Fragment>
+          ))
+        )}
+      </TableBody>
+    </Table>
 
-        {/* Pagination Bar */}
-        {displayItems.length > 0 && (
+    {/* Pagination Bar */}
+    {sortedTasks.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50/50">
             <p className="text-xs text-slate-500 font-medium">
               Affichage de{" "}
@@ -944,11 +967,11 @@ export default function TasksPage() {
               </span>{" "}
               à{" "}
               <span className="font-semibold text-slate-800">
-                {Math.min(currentPage * PAGE_SIZE, displayItems.length)}
+                {Math.min(currentPage * PAGE_SIZE, sortedTasks.length)}
               </span>{" "}
               sur{" "}
               <span className="font-semibold text-slate-800">
-                {displayItems.length}
+                {sortedTasks.length}
               </span>{" "}
               tâches
             </p>
@@ -1458,6 +1481,7 @@ export default function TasksPage() {
               variant="outline"
               size="sm"
               onClick={() => setShowConfirmDialog(false)}
+              disabled={isReassigning}
               className="text-xs"
             >
               Non
@@ -1466,10 +1490,20 @@ export default function TasksPage() {
               type="button"
               size="sm"
               onClick={handleSubmitReassign}
-              disabled={!reassignTaskId}
-              className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
+              disabled={!reassignTaskId || isReassigning}
+              className="bg-primary hover:bg-blue-800 text-white text-xs gap-1.5"
             >
-              Oui
+              {isReassigning ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Réassignation…
+                </>
+              ) : (
+                <>
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Oui
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

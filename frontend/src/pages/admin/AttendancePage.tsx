@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
@@ -14,6 +14,7 @@ import {
   LogOut,
   ChevronUp,
   ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   Table,
@@ -57,7 +58,9 @@ export default function AttendancePage() {
   const PAGE_SIZE = 10;
 
   // Sort State
-  const [sortColumn, setSortColumn] = useState<"date" | "employee_name" | "presence_minutes" | "break_minutes" | "effective_minutes" | "status">("date");
+  const [sortColumn, setSortColumn] = useState<
+    "employee" | "date" | "presence" | "break" | "effective" | "status"
+  >("date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
 
   // Notifications
@@ -137,32 +140,64 @@ export default function AttendancePage() {
   });
 
   // Sort handler
-  function handleSort(column: string) {
+  function handleSort(
+    column: "employee" | "date" | "presence" | "break" | "effective" | "status"
+  ) {
     if (sortColumn === column) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
-      setSortColumn(column as any);
+      setSortColumn(column);
       setSortDirection("asc");
     }
   }
 
   // Apply sort to filtered data
-  const sortedAttendances = [...filteredAttendances].sort((a, b) => {
-    let aVal: any = a[sortColumn as keyof Attendance];
-    let bVal: any = b[sortColumn as keyof Attendance];
-
-    if (aVal == null) aVal = "";
-    if (bVal == null) bVal = "";
-
-    let cmp = 0;
-    if (typeof aVal === "string" && typeof bVal === "string") {
-      cmp = aVal.localeCompare(bVal);
-    } else {
-      cmp = Number(aVal || 0) - Number(bVal || 0);
-    }
-
-    return sortDirection === "asc" ? cmp : -cmp;
-  });
+  const sortedAttendances = useMemo(() => {
+    return [...filteredAttendances].sort((a, b) => {
+      let cmp = 0;
+      switch (sortColumn) {
+        case "employee": {
+          const nameA = (
+            a.employee_name ||
+            (a.employee
+              ? `${a.employee.first_name} ${a.employee.last_name}`
+              : `Employé #${a.employee_id}`)
+          ).toLowerCase();
+          const nameB = (
+            b.employee_name ||
+            (b.employee
+              ? `${b.employee.first_name} ${b.employee.last_name}`
+              : `Employé #${b.employee_id}`)
+          ).toLowerCase();
+          cmp = nameA.localeCompare(nameB, "fr");
+          break;
+        }
+        case "date": {
+          cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
+          break;
+        }
+        case "presence": {
+          cmp = (a.presence_minutes || 0) - (b.presence_minutes || 0);
+          break;
+        }
+        case "break": {
+          cmp = (a.break_minutes || 0) - (b.break_minutes || 0);
+          break;
+        }
+        case "effective": {
+          cmp = (a.effective_minutes || 0) - (b.effective_minutes || 0);
+          break;
+        }
+        case "status": {
+          cmp = (a.status || "").localeCompare(b.status || "");
+          break;
+        }
+        default:
+          cmp = 0;
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  }, [filteredAttendances, sortColumn, sortDirection]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -558,85 +593,134 @@ export default function AttendancePage() {
         <Table>
           <TableHeader className="bg-slate-50/80">
             <TableRow>
+              {/* 1. Employé */}
               <TableHead
-                className="w-[220px] cursor-pointer select-none hover:bg-slate-200 rounded"
-                onClick={() => handleSort("employee_name")}
+                className="w-[220px] cursor-pointer select-none hover:bg-slate-100 transition-colors"
+                onClick={() => handleSort("employee")}
               >
-                <div className="flex items-center gap-1.5">
-                  Employé
-                  {sortColumn === "employee_name" && (
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span>Employé</span>
+                  {sortColumn === "employee" ? (
                     sortDirection === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     )
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300 opacity-60" />
                   )}
                 </div>
               </TableHead>
+
+              {/* 2. Date */}
               <TableHead
-                className="cursor-pointer select-none hover:bg-slate-200 rounded"
+                className="cursor-pointer select-none hover:bg-slate-100 transition-colors"
                 onClick={() => handleSort("date")}
               >
-                <div className="flex items-center gap-1.5">
-                  Date
-                  {sortColumn === "date" && (
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span>Date</span>
+                  {sortColumn === "date" ? (
                     sortDirection === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     )
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300 opacity-60" />
                   )}
                 </div>
               </TableHead>
-              <TableHead className="cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("presence_minutes")}>
-                <div className="flex items-center gap-1.5">
-                  Présence
-                  {sortColumn === "presence_minutes" && (
+
+              {/* 3. Arrivée / Départ */}
+              <TableHead className="font-semibold text-slate-800 whitespace-nowrap">
+                Arrivée / Départ
+              </TableHead>
+
+              {/* 4. Pauses (Matin / Déj / Soir) */}
+              <TableHead className="min-w-[190px] font-semibold text-slate-800 whitespace-nowrap">
+                Pauses (Matin / Déj / Soir)
+              </TableHead>
+
+              {/* 5. Présence */}
+              <TableHead
+                className="cursor-pointer select-none hover:bg-slate-100 transition-colors"
+                onClick={() => handleSort("presence")}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span>Présence</span>
+                  {sortColumn === "presence" ? (
                     sortDirection === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     )
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300 opacity-60" />
                   )}
                 </div>
               </TableHead>
-              <TableHead className="min-w-[190px] cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("break_minutes")}>
-                <div className="flex items-center gap-1.5">
-                  Pauses (Matin / Déj / Soir)
-                  {sortColumn === "break_minutes" && (
+
+              {/* 6. Pause Totale */}
+              <TableHead
+                className="cursor-pointer select-none hover:bg-slate-100 transition-colors"
+                onClick={() => handleSort("break")}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span>Pause Totale</span>
+                  {sortColumn === "break" ? (
                     sortDirection === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     )
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300 opacity-60" />
                   )}
                 </div>
               </TableHead>
-              <TableHead className="cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("effective_minutes")}>
-                <div className="flex items-center gap-1.5">
-                  Travail Effectif
-                  {sortColumn === "effective_minutes" && (
+
+              {/* 7. Travail Effectif */}
+              <TableHead
+                className="cursor-pointer select-none hover:bg-slate-100 transition-colors"
+                onClick={() => handleSort("effective")}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span>Travail Effectif</span>
+                  {sortColumn === "effective" ? (
                     sortDirection === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     )
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300 opacity-60" />
                   )}
                 </div>
               </TableHead>
-              <TableHead className="cursor-pointer select-none hover:bg-slate-200 rounded" onClick={() => handleSort("status")}>
-                <div className="flex items-center gap-1.5">
-                  Statut
-                  {sortColumn === "status" && (
+
+              {/* 8. Statut */}
+              <TableHead
+                className="cursor-pointer select-none hover:bg-slate-100 transition-colors"
+                onClick={() => handleSort("status")}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-slate-800">
+                  <span>Statut</span>
+                  {sortColumn === "status" ? (
                     sortDirection === "asc" ? (
                       <ChevronUp className="h-3.5 w-3.5 text-primary" />
                     ) : (
                       <ChevronDown className="h-3.5 w-3.5 text-primary" />
                     )
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300 opacity-60" />
                   )}
                 </div>
               </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+
+              {/* 9. Actions */}
+              <TableHead className="text-right font-semibold text-slate-800">
+                Actions
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -678,7 +762,7 @@ export default function AttendancePage() {
                   </TableCell>
                 </TableRow>
               ))
-            ) : filteredAttendances.length === 0 ? (
+            ) : sortedAttendances.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-3">
@@ -867,7 +951,7 @@ export default function AttendancePage() {
         </Table>
 
         {/* Pagination Bar */}
-        {filteredAttendances.length > 0 && (
+        {sortedAttendances.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50/50">
             <p className="text-xs text-slate-500 font-medium">
               Affichage de{" "}
@@ -876,11 +960,11 @@ export default function AttendancePage() {
               </span>{" "}
               à{" "}
               <span className="font-semibold text-slate-800">
-                {Math.min(currentPage * PAGE_SIZE, filteredAttendances.length)}
+                {Math.min(currentPage * PAGE_SIZE, sortedAttendances.length)}
               </span>{" "}
               sur{" "}
               <span className="font-semibold text-slate-800">
-                {filteredAttendances.length}
+                {sortedAttendances.length}
               </span>{" "}
               enregistrements
             </p>
