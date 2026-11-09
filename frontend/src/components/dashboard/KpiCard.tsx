@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -10,6 +11,8 @@ export interface KpiCardProps {
   iconTextColor?: string;
   trendText?: string;
   subtitle?: string;
+  to?: string;
+  onClick?: () => void;
 }
 
 export function KpiCard({
@@ -20,14 +23,27 @@ export function KpiCard({
   iconTextColor = "text-blue-600",
   trendText = "—",
   subtitle,
+  to,
+  onClick,
 }: KpiCardProps) {
-  return (
-    <Card className="border border-slate-200/90 bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:border-slate-300">
+  const isClickable = Boolean(to || onClick);
+
+  const content = (
+    <Card
+      onClick={onClick}
+      className={`border border-slate-200/90 bg-white shadow-sm transition-all duration-200 ${
+        isClickable
+          ? "cursor-pointer hover:shadow-md hover:border-primary/50 group-hover:border-primary/50 hover:-translate-y-0.5 active:translate-y-0"
+          : "hover:shadow-md hover:border-slate-300"
+      }`}
+    >
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           {/* Soft pastel icon */}
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBgColor} ${iconTextColor} transition-transform duration-200`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBgColor} ${iconTextColor} transition-transform duration-200 ${
+              isClickable ? "group-hover:scale-110" : ""
+            }`}
           >
             <Icon className="h-5 w-5 stroke-[2.2]" />
           </div>
@@ -58,4 +74,14 @@ export function KpiCard({
       </CardContent>
     </Card>
   );
+
+  if (to) {
+    return (
+      <Link to={to} className="block group no-underline">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
@@ -51,6 +51,8 @@ export default function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Notifications
   const [feedback, setFeedback] = useState<{
@@ -113,8 +115,7 @@ export default function AttendancePage() {
       listAllAttendance({
         employee_id:
           selectedEmployeeId !== "ALL" ? Number(selectedEmployeeId) : undefined,
-        date_from: selectedDate ? selectedDate : undefined,
-        date_to: selectedDate ? selectedDate : undefined,
+        date: selectedDate ? selectedDate : undefined,
       }),
   });
 
@@ -129,10 +130,42 @@ export default function AttendancePage() {
     return true;
   });
 
-  // Helper: Format Breaks breakdown
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedDate, selectedEmployeeId, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAttendances.length / PAGE_SIZE));
+  const paginatedAttendances = filteredAttendances.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  // Helper: Format Time as "09:00 AM" / "06:00 PM"
+  function formatTimeAMPM(isoStr?: string | null): string {
+    if (!isoStr) return "—";
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+
+  // Helper: Format duration in minutes into "Xh Ym" (e.g., 9h 00m)
+  function formatDurationHM(minutes?: number | null, isAvailable: boolean = true): string {
+    if (!isAvailable || minutes === null || minutes === undefined) {
+      return "—";
+    }
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}h ${mins.toString().padStart(2, "0")}m`;
+  }
+
+  // Helper: Format Breaks breakdown "Matin: 15m | Déj: 60m | Soir: 15m"
   function renderBreaks(breaks: BreakSummary[]) {
     if (!breaks || breaks.length === 0) {
-      return <span className="text-slate-400 italic text-[11px]">Aucune pause</span>;
+      return <span className="text-slate-400 font-mono text-xs">—</span>;
     }
 
     const items = breaks.map((b) => {
@@ -141,7 +174,9 @@ export default function AttendancePage() {
           ? "Matin"
           : b.type === "LUNCH"
           ? "Déj"
-          : "Après-midi";
+          : b.type === "EVENING"
+          ? "Soir"
+          : b.type;
 
       if (!b.end_time) {
         return `${typeLabel}: en cours`;
@@ -154,22 +189,8 @@ export default function AttendancePage() {
     });
 
     return (
-      <span className="font-mono text-xs text-slate-700 font-medium">
-        {items.join(", ")}
-      </span>
-    );
-  }
-
-  // Helper: Format Effective Working Time
-  function renderEffectiveTime(minutes: number, isPresent: boolean, isCheckedIn: boolean) {
-    if (!isPresent || !isCheckedIn) {
-      return <span className="text-slate-400 font-mono">—</span>;
-    }
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return (
-      <span className="font-mono font-semibold text-slate-900 text-xs">
-        {hours}h {mins.toString().padStart(2, "0")}m
+      <span className="font-mono text-xs text-slate-700 whitespace-nowrap">
+        {items.join(" | ")}
       </span>
     );
   }
@@ -503,14 +524,15 @@ export default function AttendancePage() {
         <Table>
           <TableHeader className="bg-slate-50/80">
             <TableRow>
-              <TableHead className="w-[260px]">Employé</TableHead>
+              <TableHead className="w-[220px]">Employé</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Arrivée</TableHead>
-              <TableHead className="min-w-[180px]">Pauses</TableHead>
-              <TableHead>Départ</TableHead>
-              <TableHead>Temps effectif</TableHead>
+              <TableHead>Arrivée / Départ</TableHead>
+              <TableHead className="min-w-[190px]">Pauses (Matin / Déj / Soir)</TableHead>
+              <TableHead>Présence</TableHead>
+              <TableHead>Pause Totale</TableHead>
+              <TableHead>Travail Effectif</TableHead>
               <TableHead>Statut</TableHead>
-              <TableHead className="text-right">Action</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -530,7 +552,7 @@ export default function AttendancePage() {
                     <div className="h-3 w-20 bg-slate-100 rounded" />
                   </TableCell>
                   <TableCell>
-                    <div className="h-3 w-16 bg-slate-100 rounded" />
+                    <div className="h-3 w-24 bg-slate-100 rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-3 w-32 bg-slate-100 rounded" />
@@ -539,7 +561,10 @@ export default function AttendancePage() {
                     <div className="h-3 w-16 bg-slate-100 rounded" />
                   </TableCell>
                   <TableCell>
-                    <div className="h-3 w-14 bg-slate-100 rounded" />
+                    <div className="h-3 w-16 bg-slate-100 rounded" />
+                  </TableCell>
+                  <TableCell>
+                    <div className="h-3 w-16 bg-slate-100 rounded" />
                   </TableCell>
                   <TableCell>
                     <div className="h-5 w-20 bg-slate-100 rounded-full" />
@@ -551,7 +576,7 @@ export default function AttendancePage() {
               ))
             ) : filteredAttendances.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-3">
                     <Clock className="h-6 w-6 stroke-[1.7]" />
                   </div>
@@ -578,7 +603,7 @@ export default function AttendancePage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredAttendances.map((item) => {
+              paginatedAttendances.map((item) => {
                 const employeeName =
                   item.employee_name ||
                   (item.employee
@@ -602,6 +627,7 @@ export default function AttendancePage() {
                 const isPresent = item.status === "PRESENT";
                 const isJustified = item.status === "ABSENT_JUSTIFIED";
                 const isUnjustified = item.status === "ABSENT_UNJUSTIFIED";
+                const hasCheckIn = Boolean(item.check_in);
 
                 return (
                   <TableRow
@@ -630,26 +656,37 @@ export default function AttendancePage() {
                       {formatDate(item.date)}
                     </TableCell>
 
-                    {/* Arrivée */}
-                    <TableCell className="font-mono text-xs text-slate-600 whitespace-nowrap">
-                      {item.check_in ? formatDateTime(item.check_in) : "—"}
+                    {/* Arrivée / Départ */}
+                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap">
+                      {item.check_in || item.check_out ? (
+                        <span>
+                          {formatTimeAMPM(item.check_in)}{" "}
+                          <span className="text-slate-400 font-sans mx-1">/</span>{" "}
+                          {formatTimeAMPM(item.check_out)}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </TableCell>
 
-                    {/* Pauses */}
+                    {/* Pauses (Matin / Déj / Soir) */}
                     <TableCell>{renderBreaks(item.breaks)}</TableCell>
 
-                    {/* Départ */}
-                    <TableCell className="font-mono text-xs text-slate-600 whitespace-nowrap">
-                      {item.check_out ? formatDateTime(item.check_out) : "—"}
+                    {/* Présence */}
+                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap">
+                      {formatDurationHM(item.presence_minutes, hasCheckIn)}
                     </TableCell>
 
-                    {/* Temps effectif */}
-                    <TableCell>
-                      {renderEffectiveTime(
-                        item.effective_minutes,
-                        isPresent,
-                        Boolean(item.check_in)
-                      )}
+                    {/* Pause Totale */}
+                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap">
+                      {formatDurationHM(item.break_minutes, hasCheckIn)}
+                    </TableCell>
+
+                    {/* Travail Effectif */}
+                    <TableCell className="whitespace-nowrap">
+                      <span className="font-mono font-bold text-slate-900 text-xs bg-slate-100/90 border border-slate-200/80 px-2 py-0.5 rounded">
+                        {formatDurationHM(item.effective_minutes, hasCheckIn)}
+                      </span>
                     </TableCell>
 
                     {/* Statut */}
@@ -657,12 +694,12 @@ export default function AttendancePage() {
                       {isPresent ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase text-emerald-700 border border-emerald-200/80">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          {item.check_out ? "JOURNÉE TERMINÉE" : "PRÉSENT"}
+                          PRÉSENT
                         </span>
                       ) : isJustified ? (
                         <div className="space-y-0.5">
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase text-amber-700 border border-amber-200/80">
-                            ABSENT JUSTIFIÉ
+                            ABSENT_JUSTIFIÉ
                           </span>
                           {item.justification_note && (
                             <p className="text-[10px] text-slate-500 italic truncate max-w-[150px]">
@@ -672,7 +709,7 @@ export default function AttendancePage() {
                         </div>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase text-rose-700 border border-rose-200/80">
-                          ABSENT NON JUSTIFIÉ
+                          ABSENT_UNJUSTIFIÉ
                         </span>
                       )}
                     </TableCell>
@@ -724,6 +761,50 @@ export default function AttendancePage() {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination Bar */}
+        {filteredAttendances.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50/50">
+            <p className="text-xs text-slate-500 font-medium">
+              Affichage de{" "}
+              <span className="font-semibold text-slate-800">
+                {(currentPage - 1) * PAGE_SIZE + 1}
+              </span>{" "}
+              à{" "}
+              <span className="font-semibold text-slate-800">
+                {Math.min(currentPage * PAGE_SIZE, filteredAttendances.length)}
+              </span>{" "}
+              sur{" "}
+              <span className="font-semibold text-slate-800">
+                {filteredAttendances.length}
+              </span>{" "}
+              enregistrements
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="h-8 text-xs font-semibold px-3"
+              >
+                Précédent
+              </Button>
+              <span className="text-xs font-semibold text-slate-600 px-2 font-mono">
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="h-8 text-xs font-semibold px-3"
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* ── MODAL 1: Declare Absence Dialog ─────────────────────── */}

@@ -32,6 +32,7 @@ export async function getMyAttendance(params?: {
 
 export async function listAllAttendance(params?: {
   employee_id?: number;
+  date?: string;
   date_from?: string;
   date_to?: string;
 }): Promise<Attendance[]> {

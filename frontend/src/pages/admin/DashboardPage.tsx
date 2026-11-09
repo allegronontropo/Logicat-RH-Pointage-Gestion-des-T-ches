@@ -156,6 +156,7 @@ export default function AdminDashboardPage() {
                   iconTextColor="text-blue-600"
                   trendText="—"
                   subtitle="Comptes employés opérationnels"
+                  to="/admin/users"
                 />
                 <KpiCard
                   title="Présents Aujourd'hui"
@@ -165,6 +166,7 @@ export default function AdminDashboardPage() {
                   iconTextColor="text-emerald-600"
                   trendText="—"
                   subtitle="Pointages enregistrés ce jour"
+                  to="/admin/attendance"
                 />
                 <KpiCard
                   title="Absences du Jour"
@@ -174,6 +176,7 @@ export default function AdminDashboardPage() {
                   iconTextColor="text-rose-600"
                   trendText="—"
                   subtitle="Absences justifiées ou injustifiées"
+                  to="/admin/attendance"
                 />
                 <KpiCard
                   title="Total des Tâches"
@@ -183,6 +186,7 @@ export default function AdminDashboardPage() {
                   iconTextColor="text-violet-600"
                   trendText="—"
                   subtitle="Total des tâches de l'équipe"
+                  to="/admin/tasks"
                 />
                 <KpiCard
                   title="Tâches en Cours"
@@ -192,6 +196,7 @@ export default function AdminDashboardPage() {
                   iconTextColor="text-amber-600"
                   trendText="—"
                   subtitle="En cours d'exécution"
+                  to="/admin/tasks"
                 />
                 <KpiCard
                   title="Tâches Terminées"
@@ -201,6 +206,7 @@ export default function AdminDashboardPage() {
                   iconTextColor="text-teal-600"
                   trendText="—"
                   subtitle="Complétées avec succès"
+                  to="/admin/tasks"
                 />
               </>
             )}

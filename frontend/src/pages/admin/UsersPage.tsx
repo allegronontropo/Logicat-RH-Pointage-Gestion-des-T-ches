@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
@@ -71,6 +71,8 @@ export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | "ADMIN_RH" | "EMPLOYEE">("ALL");
   const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   // Notifications & Feedback
   const [feedback, setFeedback] = useState<{
@@ -157,6 +159,16 @@ export default function UsersPage() {
       (u.role === "ADMIN_RH" ? "Administration" : "");
     return userDept === departmentFilter;
   });
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, roleFilter, departmentFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
 
   // ── Open Create Modal ───────────────────────────────────────────
   function handleOpenCreate() {
@@ -580,7 +592,7 @@ export default function UsersPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredUsers.map((targetUser) => {
+              paginatedUsers.map((targetUser) => {
                 const initials =
                   `${targetUser.first_name?.[0] || ""}${targetUser.last_name?.[0] || ""}`.toUpperCase() ||
                   "U";
@@ -764,6 +776,50 @@ export default function UsersPage() {
             )}
           </TableBody>
         </Table>
+
+        {/* Pagination Bar */}
+        {filteredUsers.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-slate-200/80 bg-slate-50/50">
+            <p className="text-xs text-slate-500 font-medium">
+              Affichage de{" "}
+              <span className="font-semibold text-slate-800">
+                {(currentPage - 1) * PAGE_SIZE + 1}
+              </span>{" "}
+              à{" "}
+              <span className="font-semibold text-slate-800">
+                {Math.min(currentPage * PAGE_SIZE, filteredUsers.length)}
+              </span>{" "}
+              sur{" "}
+              <span className="font-semibold text-slate-800">
+                {filteredUsers.length}
+              </span>{" "}
+              utilisateurs
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="h-8 text-xs font-semibold px-3"
+              >
+                Précédent
+              </Button>
+              <span className="text-xs font-semibold text-slate-600 px-2 font-mono">
+                {currentPage} / {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="h-8 text-xs font-semibold px-3"
+              >
+                Suivant
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* ── MODAL 1: Create User Dialog ─────────────────────────── */}

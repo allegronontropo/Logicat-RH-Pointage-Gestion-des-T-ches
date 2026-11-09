@@ -157,6 +157,7 @@ def list_all_attendance(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(require_admin)],
     employee_id: int | None = Query(default=None, description="Filter by employee ID"),
+    date: date | None = Query(default=None, description="Filter by exact date (YYYY-MM-DD)"),
     date_from: date | None = Query(default=None, description="Start date (YYYY-MM-DD)"),
     date_to: date | None = Query(default=None, description="End date (YYYY-MM-DD)"),
 ) -> list[AttendanceResponse]:
@@ -167,10 +168,13 @@ def list_all_attendance(
 
     if employee_id:
         query = query.filter(Attendance.employee_id == employee_id)
-    if date_from:
-        query = query.filter(Attendance.date >= date_from)
-    if date_to:
-        query = query.filter(Attendance.date <= date_to)
+    if date:
+        query = query.filter(Attendance.date == date)
+    else:
+        if date_from:
+            query = query.filter(Attendance.date >= date_from)
+        if date_to:
+            query = query.filter(Attendance.date <= date_to)
 
     attendances = query.order_by(Attendance.date.desc()).all()
     return [AttendanceResponse.from_orm_with_durations(a) for a in attendances]
