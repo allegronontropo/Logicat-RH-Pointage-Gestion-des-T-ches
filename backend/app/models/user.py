@@ -44,5 +44,9 @@ class User(Base):
         "Employee", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
 
+    @property
+    def employee_profile(self) -> "Employee | None":
+        return self.employee
+
     def __repr__(self) -> str:  # pragma: no cover
         return f"<User id={self.id} email={self.email!r} role={self.role!r}>"

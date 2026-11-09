@@ -17,7 +17,9 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
+  Eye,
 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Table,
   TableHeader,
@@ -62,6 +64,7 @@ import type { UserDetail } from "@/types";
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
@@ -548,9 +551,13 @@ export default function UsersPage() {
                   >
                     {/* Nom Complet */}
                     <TableCell>
-                      <div className="flex items-center gap-3">
+                      <Link
+                        to={`/admin/users/${targetUser.id}`}
+                        className="flex items-center gap-3 group cursor-pointer"
+                        title="Consulter la fiche profil de l'utilisateur"
+                      >
                         <div
-                          className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white shadow-sm ${
+                          className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-xs font-bold text-white shadow-sm transition-transform group-hover:scale-105 ${
                             isAdmin
                               ? "bg-gradient-to-tr from-indigo-600 to-blue-700"
                               : "bg-gradient-to-tr from-blue-600 to-cyan-600"
@@ -560,7 +567,7 @@ export default function UsersPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-900 truncate">
+                            <span className="text-xs font-bold text-slate-900 truncate group-hover:text-primary transition-colors">
                               {targetUser.first_name} {targetUser.last_name}
                             </span>
                             {isCurrent && (
@@ -575,7 +582,7 @@ export default function UsersPage() {
                             </p>
                           )}
                         </div>
-                      </div>
+                      </Link>
                     </TableCell>
 
                     {/* Email */}
@@ -645,6 +652,15 @@ export default function UsersPage() {
                             Actions • {targetUser.first_name}
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
+
+                          {/* Voir la fiche profil */}
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/admin/users/${targetUser.id}`)}
+                            className="gap-2 cursor-pointer font-medium text-primary hover:text-blue-800"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Voir la fiche profil</span>
+                          </DropdownMenuItem>
 
                           {/* Modifier */}
                           <DropdownMenuItem

@@ -7,6 +7,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import EmployeeLayout from "@/components/layout/EmployeeLayout";
 import AdminDashboardPage from "@/pages/admin/DashboardPage";
 import UsersPage from "@/pages/admin/UsersPage";
+import UserDetailPage from "@/pages/admin/UserDetailPage";
 import AttendancePage from "@/pages/admin/AttendancePage";
 import TasksPage from "@/pages/admin/TasksPage";
 import EmployeeDashboardPage from "@/pages/employee/DashboardPage";
@@ -37,6 +38,7 @@ export default function App() {
                 <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<AdminDashboardPage />} />
                 <Route path="users" element={<UsersPage />} />
+                <Route path="users/:id" element={<UserDetailPage />} />
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="tasks" element={<TasksPage />} />
               </Route>

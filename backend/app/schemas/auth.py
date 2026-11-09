@@ -37,9 +37,11 @@ class UserRead(BaseModel):
     last_name: str
     role: str
     is_active: bool
-    employee_profile: EmployeeProfileRead | None = None
+    employee_profile: EmployeeProfileRead | None = Field(
+        default=None, validation_alias="employee"
+    )
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class TokenResponse(BaseModel):

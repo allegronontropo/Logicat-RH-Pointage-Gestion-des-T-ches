@@ -66,8 +66,10 @@ class UserReadDetail(BaseModel):
     email: str
     first_name: str
     last_name: str
+    phone: str | None = None
     role: str
     is_active: bool
+    employee_id: int | None = None
     department: str | None = None
     position: str | None = None
     hire_date: date | None = None
@@ -80,8 +82,10 @@ class UserReadDetail(BaseModel):
             email=user.email,
             first_name=user.first_name,
             last_name=user.last_name,
+            phone=user.phone,
             role=user.role,
             is_active=user.is_active,
+            employee_id=employee.id if employee else None,
             department=employee.department if employee else None,
             position=employee.position if employee else None,
             hire_date=employee.hire_date if employee else None,

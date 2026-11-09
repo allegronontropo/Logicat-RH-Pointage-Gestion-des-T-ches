@@ -26,6 +26,7 @@ export interface EmployeeProfile {
 }
 
 export interface UserDetail extends User {
+  employee_id?: number | null;
   department?: string | null;
   position?: string | null;
   hire_date?: string | null;
