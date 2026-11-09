@@ -112,3 +112,9 @@ class AbsenceCreate(BaseModel):
     date: date
     status: str  # 'ABSENT_JUSTIFIED' | 'ABSENT_UNJUSTIFIED'
     justification_note: str | None = None
+
+
+class AbsenceJustifyRequest(BaseModel):
+    """Request body for PATCH /api/attendances/{id}/justify."""
+
+    justification_note: str = Field(..., min_length=1, max_length=255)

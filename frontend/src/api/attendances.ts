@@ -49,6 +49,17 @@ export async function declareAbsence(payload: {
   return data;
 }
 
+export async function justifyAbsence(
+  attendanceId: number,
+  justificationNote: string
+): Promise<Attendance> {
+  const { data } = await apiClient.patch<Attendance>(
+    `/api/attendances/${attendanceId}/justify`,
+    { justification_note: justificationNote }
+  );
+  return data;
+}
+
 export async function startBreak(type: "MORNING" | "LUNCH" | "EVENING"): Promise<unknown> {
   const { data } = await apiClient.post("/api/breaks/start", { type });
   return data;

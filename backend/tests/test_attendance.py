@@ -237,3 +237,35 @@ def test_calculate_durations(client, db_session):
     assert presence == 540  # 9 hours = 540 minutes
     assert break_min == 90  # 1.5 hours = 90 minutes
     assert effective == 450  # 7.5 hours = 450 minutes
+
+
+# ---------------------------------------------------------------------------
+# Test justify absence
+# ---------------------------------------------------------------------------
+
+def test_justify_absence_admin(client, db_session):
+    admin = _make_user(db_session, "admin_abs@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin_token = _make_token(admin)
+
+    user, employee = _make_employee(db_session, "emp_abs@logicat.ma", "Emp123!")
+
+    # Create unjustified absence
+    attendance = Attendance(
+        employee_id=employee.id,
+        date=date(2026, 11, 8),
+        status="ABSENT_UNJUSTIFIED",
+    )
+    db_session.add(attendance)
+    db_session.commit()
+    db_session.refresh(attendance)
+
+    # Admin justifies absence
+    response = client.patch(
+        f"/api/attendances/{attendance.id}/justify",
+        json={"justification_note": "Certificat médical fourni"},
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ABSENT_JUSTIFIED"
+    assert data["justification_note"] == "Certificat médical fourni"

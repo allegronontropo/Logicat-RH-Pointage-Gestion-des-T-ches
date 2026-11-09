@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   AreaChart,
   Area,
@@ -8,26 +9,14 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ChevronDown, Calendar, Users, TrendingUp } from "lucide-react";
+import { ChevronDown, Calendar, Users, TrendingUp, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getAttendanceTrends } from "@/api/dashboard";
+import { formatDate } from "@/lib/utils";
 
 // TODO: Replace with real aggregated data when available.
-const MOCK_DATA_7_DAYS = [
-  { day: "Lun", date: "03 Nov", present: 18, remote: 2, absent: 1, rate: 95 },
-  { day: "Mar", date: "04 Nov", present: 19, remote: 1, absent: 0, rate: 100 },
-  { day: "Mer", date: "05 Nov", present: 17, remote: 2, absent: 1, rate: 90 },
-  { day: "Jeu", date: "06 Nov", present: 20, remote: 0, absent: 0, rate: 100 },
-  { day: "Ven", date: "07 Nov", present: 18, remote: 1, absent: 1, rate: 95 },
-  { day: "Sam", date: "08 Nov", present: 6, remote: 0, absent: 0, rate: 100 },
-  { day: "Dim", date: "09 Nov", present: 19, remote: 1, absent: 0, rate: 98 },
-];
 
-const MOCK_DATA_30_DAYS = [
-  { day: "S1", date: "Semaine 1", present: 94, remote: 8, absent: 3, rate: 96 },
-  { day: "S2", date: "Semaine 2", present: 98, remote: 6, absent: 1, rate: 99 },
-  { day: "S3", date: "Semaine 3", present: 91, remote: 10, absent: 4, rate: 92 },
-  { day: "S4", date: "Semaine 4", present: 97, remote: 7, absent: 2, rate: 98 },
-];
+const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 interface CustomTooltipProps {
   active?: boolean;
@@ -51,9 +40,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: entry.color }}
               />
-              <span className="text-slate-500 font-medium capitalize">
-                {entry.name === "present" ? "Présents au bureau" : "En télétravail"}:
-              </span>
+              <span className="text-slate-500 font-medium">Présents:</span>
               <span className="font-bold text-slate-900">{entry.value}</span>
             </div>
           ))}
@@ -65,8 +52,37 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
 }
 
 export function AttendanceChart() {
-  const [period, setPeriod] = useState<"7d" | "30d">("7d");
-  const data = period === "7d" ? MOCK_DATA_7_DAYS : MOCK_DATA_30_DAYS;
+  const [period, setPeriod] = useState<"7d">("7d");
+
+  // Fetch real 7-day attendance trends from GET /api/dashboard/trends
+  const { data: trendsData = [], isLoading } = useQuery({
+    queryKey: ["dashboard-trends"],
+    queryFn: getAttendanceTrends,
+    refetchInterval: 60_000,
+  });
+
+  // Format real data for chart
+  const formattedData = trendsData.map((item) => {
+    // Parse date parts YYYY-MM-DD
+    const parts = item.date.split("-");
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    const dayName = DAY_NAMES[d.getDay()] || "—";
+    return {
+      rawDate: item.date,
+      day: `${dayName} ${parts[2]}`,
+      present: item.present_count,
+    };
+  });
+
+  // Calculate real summaries
+  const totalPresents = trendsData.reduce((acc, curr) => acc + curr.present_count, 0);
+  const dailyAvg = trendsData.length > 0 ? (totalPresents / trendsData.length).toFixed(1) : "0";
+  const maxPoint = trendsData.reduce(
+    (max, p) => (p.present_count > max.present_count ? p : max),
+    trendsData[0] || { present_count: 0, date: "" }
+  );
+
+  const hasAnyData = totalPresents > 0;
 
   return (
     <Card className="border border-slate-200/90 bg-white shadow-sm">
@@ -77,11 +93,11 @@ export function AttendanceChart() {
               Attendance Trends
             </CardTitle>
             <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200/60">
-              Live
+              Live API
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Suivi quotidien des présences et répartition du temps de travail
+            Historique réel des présences sur les 7 derniers jours
           </p>
         </div>
 
@@ -91,11 +107,10 @@ export function AttendanceChart() {
             <select
               aria-label="Sélectionner la période d'affichage"
               value={period}
-              onChange={(e) => setPeriod(e.target.value as "7d" | "30d")}
+              onChange={(e) => setPeriod(e.target.value as "7d")}
               className="appearance-none rounded-lg border border-slate-200 bg-slate-50/70 pl-3 pr-8 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
             >
               <option value="7d">Last 7 Days</option>
-              <option value="30d">Last 30 Days</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
           </div>
@@ -103,15 +118,17 @@ export function AttendanceChart() {
       </CardHeader>
 
       <CardContent className="pt-5">
-        {/* Quick stat highlights */}
+        {/* Real dynamic stat highlights */}
         <div className="grid grid-cols-3 gap-2 pb-5 border-b border-slate-100 mb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
               <Users className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-slate-400">Moyenne quotidienne</p>
-              <p className="text-sm font-bold text-slate-800">18.4 employés</p>
+              <p className="text-[11px] font-medium text-slate-400">Total pointages</p>
+              <p className="text-sm font-bold text-slate-800">
+                {isLoading ? "…" : `${totalPresents} présences`}
+              </p>
             </div>
           </div>
 
@@ -120,8 +137,10 @@ export function AttendanceChart() {
               <TrendingUp className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[11px] font-medium text-slate-400">Taux de présence</p>
-              <p className="text-sm font-bold text-emerald-600">96.8%</p>
+              <p className="text-[11px] font-medium text-slate-400">Moyenne quotidienne</p>
+              <p className="text-sm font-bold text-emerald-600">
+                {isLoading ? "…" : `${dailyAvg} / jour`}
+              </p>
             </div>
           </div>
 
@@ -131,75 +150,85 @@ export function AttendanceChart() {
             </div>
             <div>
               <p className="text-[11px] font-medium text-slate-400">Pic de présence</p>
-              <p className="text-sm font-bold text-slate-800">Jeudi (20/20)</p>
+              <p className="text-sm font-bold text-slate-800">
+                {isLoading
+                  ? "…"
+                  : maxPoint && maxPoint.present_count > 0
+                  ? `${maxPoint.present_count} (${formatDate(maxPoint.date)})`
+                  : "—"}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Chart */}
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={data}
-              margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1E40AF" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#1E40AF" stopOpacity={0.0} />
-                </linearGradient>
-                <linearGradient id="colorRemote" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#38BDF8" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#38BDF8" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                vertical={false}
-                stroke="#F1F5F9"
-              />
-              <XAxis
-                dataKey="day"
-                tickLine={false}
-                axisLine={{ stroke: "#E2E8F0" }}
-                tick={{ fill: "#64748B", fontSize: 12, fontWeight: 500 }}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: "#94A3B8", fontSize: 11 }}
-                domain={[0, "auto"]}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Area
-                type="monotone"
-                dataKey="present"
-                stroke="#1E40AF"
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill="url(#colorPresent)"
-              />
-              <Area
-                type="monotone"
-                dataKey="remote"
-                stroke="#38BDF8"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorRemote)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        {/* Chart or Empty State */}
+        {isLoading ? (
+          <div className="h-64 flex items-center justify-center">
+            <div className="animate-pulse space-y-2 text-center">
+              <div className="h-4 w-28 bg-slate-100 rounded mx-auto" />
+              <div className="h-32 w-full bg-slate-50 rounded" />
+            </div>
+          </div>
+        ) : !hasAnyData ? (
+          <div className="h-64 flex flex-col items-center justify-center text-center p-6 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+            <BarChart3 className="h-8 w-8 text-slate-300 mb-2 stroke-[1.5]" />
+            <p className="text-xs font-bold text-slate-700">
+              Aucune donnée de présence
+            </p>
+            <p className="text-[11px] text-slate-400 mt-1 max-w-xs">
+              Les données de pointage pour les 7 derniers jours s'afficheront ici automatiquement.
+            </p>
+          </div>
+        ) : (
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={formattedData}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="colorPresent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#1E40AF" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#1E40AF" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#F1F5F9"
+                />
+                <XAxis
+                  dataKey="day"
+                  tickLine={false}
+                  axisLine={{ stroke: "#E2E8F0" }}
+                  tick={{ fill: "#64748B", fontSize: 12, fontWeight: 500 }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "#94A3B8", fontSize: 11 }}
+                  domain={[0, "auto"]}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="present"
+                  stroke="#1E40AF"
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill="url(#colorPresent)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         {/* Legend */}
         <div className="mt-3 flex items-center justify-center gap-6 text-xs font-medium text-slate-600">
           <div className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full bg-[#1E40AF]" />
-            <span>Présents au bureau</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#38BDF8]" />
-            <span>Télétravail / En déplacement</span>
+            <span>Pointages réels (GET /api/dashboard/trends)</span>
           </div>
         </div>
       </CardContent>

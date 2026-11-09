@@ -11,6 +11,7 @@ Endpoints:
 from __future__ import annotations
 
 from typing import Annotated
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -73,6 +74,38 @@ def admin_dashboard(
         "in_progress_tasks": in_progress_tasks,
         "done_tasks": done_tasks,
     }
+
+
+@router.get(
+    "/trends",
+    summary="Attendance trends over last 7 days",
+    description="Admin: attendances over the last 7 calendar days.",
+)
+def attendance_trends(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+) -> list[dict]:
+    today = attendance_service._today()
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+
+    results = []
+    for d in days:
+        count = (
+            db.query(Attendance)
+            .join(Employee, Employee.id == Attendance.employee_id)
+            .join(User, User.id == Employee.user_id)
+            .filter(
+                Attendance.date == d,
+                Attendance.check_in.isnot(None),
+                User.role == "EMPLOYEE",
+            )
+            .count()
+        )
+        results.append({
+            "date": d.isoformat(),
+            "present_count": count,
+        })
+    return results
 
 
 @router.get(

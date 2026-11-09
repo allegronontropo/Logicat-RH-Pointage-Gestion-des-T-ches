@@ -18,7 +18,6 @@ import {
   LogOut,
   Building2,
   Search,
-  Bell,
   Menu,
   X,
   ChevronRight,
@@ -49,7 +48,6 @@ export default function AdminLayout() {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -264,54 +262,8 @@ export default function AdminLayout() {
             </div>
           </div>
 
-          {/* Right: Notifications & User Profile */}
+          {/* Right: User Profile & Logout */}
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Notification Bell with red dot */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setNotificationsOpen(!notificationsOpen)}
-                className="relative rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition"
-                aria-label="Notifications"
-              >
-                <Bell className="h-5 w-5 stroke-[1.8]" />
-                {/* Red dot indicator */}
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-              </button>
-
-              {/* Quick Notifications Popover */}
-              {notificationsOpen && (
-                <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl z-50 animate-fadeIn">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 px-1">
-                    <p className="text-xs font-bold text-slate-900">Notifications</p>
-                    <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-600">
-                      2 non lues
-                    </span>
-                  </div>
-                  <div className="space-y-2 py-2">
-                    <div className="rounded-lg p-2 hover:bg-slate-50 transition cursor-pointer">
-                      <p className="text-xs font-semibold text-slate-800">
-                        Nouveau pointage tardif
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Karim Alami a pointé à 09:42 AM (+42 min).
-                      </p>
-                    </div>
-                    <div className="rounded-lg p-2 hover:bg-slate-50 transition cursor-pointer">
-                      <p className="text-xs font-semibold text-slate-800">
-                        Demande d'absence reçue
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        Youssef Badri demande un arrêt justifié.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="h-6 w-px bg-slate-200 hidden sm:block" />
-
             {/* User Profile Pill & Logout */}
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex flex-col text-right">

@@ -243,6 +243,26 @@ def declare_absence(
     return attendance
 
 
+def justify_absence(
+    db: Session,
+    attendance_id: int,
+    justification_note: str,
+) -> Attendance:
+    """Update an unjustified absence to justified with a note."""
+    attendance = db.get(Attendance, attendance_id)
+    if attendance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found",
+        )
+
+    attendance.status = "ABSENT_JUSTIFIED"
+    attendance.justification_note = justification_note
+    db.commit()
+    db.refresh(attendance)
+    return attendance
+
+
 # ---------------------------------------------------------------------------
 # Duration calculations
 # ---------------------------------------------------------------------------

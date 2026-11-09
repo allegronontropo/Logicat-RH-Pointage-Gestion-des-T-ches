@@ -27,7 +27,7 @@ from app.models.attendance import Attendance
 from app.models.employee import Employee
 from app.models.user import User
 from app.models.break_ import Break
-from app.schemas.attendance import AttendanceResponse, AbsenceCreate
+from app.schemas.attendance import AttendanceResponse, AbsenceCreate, AbsenceJustifyRequest
 from app.services import attendance_service
 
 router = APIRouter(prefix="/api/attendances", tags=["attendances"])
@@ -193,6 +193,35 @@ def declare_absence_endpoint(
     attendance = (
         db.query(Attendance)
         .options(joinedload(Attendance.breaks))
+        .filter(Attendance.id == attendance.id)
+        .first()
+    )
+    return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.patch(
+    "/{attendance_id}/justify",
+    response_model=AttendanceResponse,
+    summary="Justify an absence",
+    description="Admin updates an unjustified absence to justified with a justification note.",
+)
+def justify_absence_endpoint(
+    attendance_id: int,
+    data: AbsenceJustifyRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+) -> AttendanceResponse:
+    attendance = attendance_service.justify_absence(
+        db,
+        attendance_id=attendance_id,
+        justification_note=data.justification_note,
+    )
+    attendance = (
+        db.query(Attendance)
+        .options(
+            joinedload(Attendance.breaks),
+            joinedload(Attendance.employee).joinedload(Employee.user),
+        )
         .filter(Attendance.id == attendance.id)
         .first()
     )
