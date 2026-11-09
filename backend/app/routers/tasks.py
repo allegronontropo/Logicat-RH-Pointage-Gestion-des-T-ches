@@ -47,6 +47,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 # Admin endpoints
 # ---------------------------------------------------------------------------
 
+@router.post("", response_model=TaskResponse, include_in_schema=False, status_code=status.HTTP_201_CREATED)
 @router.post(
     "/",
     response_model=TaskResponse,
@@ -83,6 +84,7 @@ def create_task_endpoint(
     return TaskResponse.from_orm_with_assignee(task)
 
 
+@router.get("", response_model=list[TaskResponse], include_in_schema=False)
 @router.get(
     "/",
     response_model=list[TaskResponse],

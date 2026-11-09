@@ -141,6 +141,7 @@ def get_my_attendance(
 # Admin endpoints
 # ---------------------------------------------------------------------------
 
+@router.get("", response_model=list[AttendanceResponse], include_in_schema=False)
 @router.get(
     "/",
     response_model=list[AttendanceResponse],

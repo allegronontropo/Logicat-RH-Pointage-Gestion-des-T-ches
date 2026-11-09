@@ -35,6 +35,7 @@ from app.services import user_service
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
+@router.post("", response_model=UserRead, include_in_schema=False, status_code=status.HTTP_201_CREATED)
 @router.post(
     "/",
     response_model=UserRead,
@@ -51,6 +52,7 @@ def create_user_endpoint(
     return UserRead.model_validate(user)
 
 
+@router.get("", response_model=list[UserRead], include_in_schema=False)
 @router.get(
     "/",
     response_model=list[UserRead],
