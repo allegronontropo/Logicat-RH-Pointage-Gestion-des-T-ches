@@ -54,7 +54,7 @@ export function AttendanceChart() {
 
   // Fetch real 7-day attendance trends from GET /api/dashboard/trends
   const { data: trendsData = [], isLoading } = useQuery({
-    queryKey: ["dashboard-trends"],
+    queryKey: ["dashboard", "trends"],
     queryFn: getAttendanceTrends,
     refetchInterval: 60_000,
   });

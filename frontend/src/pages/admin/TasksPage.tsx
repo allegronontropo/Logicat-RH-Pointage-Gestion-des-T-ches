@@ -193,7 +193,7 @@ export default function TasksPage() {
       });
 
       await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setIsCreateOpen(false);
       setFeedback({
         type: "success",
@@ -246,7 +246,7 @@ export default function TasksPage() {
       });
 
       await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setEditingTask(null);
       setFeedback({
         type: "success",
@@ -270,7 +270,7 @@ export default function TasksPage() {
     try {
       await deleteTask(deletingTask.id);
       await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setDeletingTask(null);
       setFeedback({
         type: "success",

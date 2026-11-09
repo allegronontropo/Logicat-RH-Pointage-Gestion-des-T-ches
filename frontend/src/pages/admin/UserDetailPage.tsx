@@ -213,7 +213,7 @@ export default function UserDetailPage() {
       }
       await refetchUser();
       await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data

@@ -178,34 +178,47 @@ def list_all_attendance(
 
 @router.post(
     "/absences",
-    response_model=AttendanceResponse,
+    response_model=list[AttendanceResponse],
     summary="Declare absence",
-    description="Admin declares a justified or unjustified absence for an employee on a date.",
+    description="Admin declares a justified or unjustified absence for an employee across a date range.",
     status_code=status.HTTP_201_CREATED,
 )
 def declare_absence_endpoint(
     absence_data: AbsenceCreate,
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(require_admin)],
-) -> AttendanceResponse:
-    attendance = attendance_service.declare_absence(
+) -> list[AttendanceResponse]:
+    start = absence_data.start_date or absence_data.date
+    end = absence_data.end_date or start
+    if not start or not end:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date and end_date are required",
+        )
+    records = attendance_service.declare_absence(
         db,
         employee_id=absence_data.employee_id,
-        absence_date=absence_data.date,
+        start_date=start,
+        end_date=end,
         status=absence_data.status,
         justification_note=absence_data.justification_note,
         override=absence_data.override,
     )
-    attendance = (
+    if not records:
+        return []
+
+    record_ids = [r.id for r in records]
+    attendances = (
         db.query(Attendance)
         .options(
             joinedload(Attendance.breaks),
             joinedload(Attendance.employee).joinedload(Employee.user),
         )
-        .filter(Attendance.id == attendance.id)
-        .first()
+        .filter(Attendance.id.in_(record_ids))
+        .order_by(Attendance.date.asc())
+        .all()
     )
-    return AttendanceResponse.from_orm_with_durations(attendance)
+    return [AttendanceResponse.from_orm_with_durations(a) for a in attendances]
 
 
 @router.patch(

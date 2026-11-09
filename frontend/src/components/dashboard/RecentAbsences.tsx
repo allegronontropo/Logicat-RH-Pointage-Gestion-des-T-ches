@@ -68,8 +68,8 @@ export function RecentAbsences({
     try {
       await justifyAbsence(selectedAbsence.id, justificationNote.trim());
       // Invalidate queries to refresh attendances and dashboard KPIs instantly
-      await queryClient.invalidateQueries({ queryKey: ["admin-attendances"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendances"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       closeJustifyModal();
     } catch (err: unknown) {
       const msg =

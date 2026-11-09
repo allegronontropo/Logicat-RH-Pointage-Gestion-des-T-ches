@@ -61,7 +61,8 @@ export default function AttendancePage() {
   // Modal: Declare Absence
   const [isDeclareOpen, setIsDeclareOpen] = useState(false);
   const [absenceEmployeeId, setAbsenceEmployeeId] = useState<string>("");
-  const [absenceDate, setAbsenceDate] = useState<string>(todayStr);
+  const [absenceStartDate, setAbsenceStartDate] = useState<string>(todayStr);
+  const [absenceEndDate, setAbsenceEndDate] = useState<string>(todayStr);
   const [absenceStatus, setAbsenceStatus] = useState<
     "ABSENT_JUSTIFIED" | "ABSENT_UNJUSTIFIED"
   >("ABSENT_UNJUSTIFIED");
@@ -102,7 +103,8 @@ export default function AttendancePage() {
     refetch,
   } = useQuery({
     queryKey: [
-      "admin-attendances-list",
+      "attendances",
+      "admin-list",
       selectedDate,
       selectedEmployeeId,
       statusFilter,
@@ -174,8 +176,15 @@ export default function AttendancePage() {
 
   // ── Open Declare Absence Modal ──────────────────────────────────
   function handleOpenDeclare() {
-    setAbsenceEmployeeId(employees[0]?.employee_profile?.id ? String(employees[0].employee_profile.id) : (employees[0]?.employee_id ? String(employees[0].employee_id) : String(employees[0]?.id || "")));
-    setAbsenceDate(todayStr);
+    setAbsenceEmployeeId(
+      employees[0]?.employee_profile?.id
+        ? String(employees[0].employee_profile.id)
+        : employees[0]?.employee_id
+        ? String(employees[0].employee_id)
+        : String(employees[0]?.id || "")
+    );
+    setAbsenceStartDate(todayStr);
+    setAbsenceEndDate(todayStr);
     setAbsenceStatus("ABSENT_UNJUSTIFIED");
     setAbsenceJustification("");
     setDeclareError(null);
@@ -192,8 +201,14 @@ export default function AttendancePage() {
       setDeclareError("Veuillez sélectionner un employé.");
       return;
     }
-    if (!absenceDate) {
-      setDeclareError("Veuillez choisir une date.");
+    if (!absenceStartDate || !absenceEndDate) {
+      setDeclareError("Veuillez renseigner les dates de début et de fin.");
+      return;
+    }
+    if (absenceStartDate > absenceEndDate) {
+      setDeclareError(
+        "La date de début doit être antérieure ou égale à la date de fin."
+      );
       return;
     }
 
@@ -201,13 +216,15 @@ export default function AttendancePage() {
     try {
       await declareAbsence({
         employee_id: empIdNum,
-        date: absenceDate,
+        start_date: absenceStartDate,
+        end_date: absenceEndDate,
         status: absenceStatus,
         justification_note: absenceJustification.trim() || undefined,
       });
 
       await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendances"] });
       setIsDeclareOpen(false);
       setFeedback({
         type: "success",
@@ -245,7 +262,8 @@ export default function AttendancePage() {
     try {
       await justifyAbsence(justifyingAttendance.id, justifyNote.trim());
       await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendances"] });
       setJustifyingAttendance(null);
       setFeedback({
         type: "success",
@@ -283,7 +301,8 @@ export default function AttendancePage() {
       });
 
       await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendances"] });
       setDepartureAttendance(null);
       setFeedback({
         type: "success",
@@ -756,19 +775,40 @@ export default function AttendancePage() {
               </select>
             </div>
 
-            {/* Date */}
-            <div className="space-y-1.5">
-              <Label htmlFor="abs-date" className="text-xs font-semibold text-slate-700">
-                Date de l'absence *
-              </Label>
-              <Input
-                id="abs-date"
-                type="date"
-                required
-                value={absenceDate}
-                onChange={(e) => setAbsenceDate(e.target.value)}
-                className="text-xs h-9"
-              />
+            {/* Multi-Day Dates: Date de début and Date de fin */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="abs-start-date"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Date de début *
+                </Label>
+                <Input
+                  id="abs-start-date"
+                  type="date"
+                  required
+                  value={absenceStartDate}
+                  onChange={(e) => setAbsenceStartDate(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="abs-end-date"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Date de fin *
+                </Label>
+                <Input
+                  id="abs-end-date"
+                  type="date"
+                  required
+                  value={absenceEndDate}
+                  onChange={(e) => setAbsenceEndDate(e.target.value)}
+                  className="text-xs h-9"
+                />
+              </div>
             </div>
 
             {/* Status */}

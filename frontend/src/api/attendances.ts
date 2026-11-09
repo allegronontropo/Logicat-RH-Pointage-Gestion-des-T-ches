@@ -41,12 +41,13 @@ export async function listAllAttendance(params?: {
 
 export async function declareAbsence(payload: {
   employee_id: number;
-  date: string;
+  start_date: string;
+  end_date: string;
   status: "ABSENT_JUSTIFIED" | "ABSENT_UNJUSTIFIED";
   justification_note?: string;
   override?: boolean;
-}): Promise<Attendance> {
-  const { data } = await apiClient.post<Attendance>("/api/attendances/absences", payload);
+}): Promise<Attendance[]> {
+  const { data } = await apiClient.post<Attendance[]>("/api/attendances/absences", payload);
   return data;
 }
 

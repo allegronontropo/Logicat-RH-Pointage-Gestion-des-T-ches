@@ -6,10 +6,11 @@ Pydantic schemas for attendance and absences.
 
 from __future__ import annotations
 
-from datetime import datetime, date
-from typing import TYPE_CHECKING
+from datetime import datetime
+import datetime as dt
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
     from app.models.break_ import Break
@@ -45,7 +46,7 @@ class AttendanceResponse(BaseModel):
     employee_id: int
     employee_name: str | None = None
     employee: EmployeeSummary | None = None
-    date: date
+    date: dt.date
     check_in: datetime | None = None
     check_out: datetime | None = None
     status: str
@@ -109,10 +110,31 @@ class AbsenceCreate(BaseModel):
     """Request body for POST /api/attendances/absences (admin declares absence)."""
 
     employee_id: int
-    date: date
+    start_date: dt.date | None = None
+    end_date: dt.date | None = None
+    date: dt.date | None = None
     status: str  # 'ABSENT_JUSTIFIED' | 'ABSENT_UNJUSTIFIED'
     justification_note: str | None = None
     override: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def harmonize_dates(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            single = data.get("date")
+            start = data.get("start_date") or single
+            end = data.get("end_date") or start
+            data["start_date"] = start
+            data["end_date"] = end
+        return data
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "AbsenceCreate":
+        if not self.start_date or not self.end_date:
+            raise ValueError("start_date and end_date are required")
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be before or equal to end_date")
+        return self
 
 
 class AbsenceJustifyRequest(BaseModel):

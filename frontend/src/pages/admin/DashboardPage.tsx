@@ -43,7 +43,7 @@ export default function AdminDashboardPage() {
     refetch: refetchKpis,
     isFetching: isKpiFetching,
   } = useQuery({
-    queryKey: ["admin-dashboard"],
+    queryKey: ["dashboard", "admin"],
     queryFn: getAdminDashboard,
     refetchInterval: 60_000,
   });
@@ -55,7 +55,7 @@ export default function AdminDashboardPage() {
     refetch: refetchAttendances,
     isFetching: isAttendancesFetching,
   } = useQuery({
-    queryKey: ["admin-attendances"],
+    queryKey: ["attendances", "admin"],
     queryFn: () => listAllAttendance(),
     refetchInterval: 60_000,
   });

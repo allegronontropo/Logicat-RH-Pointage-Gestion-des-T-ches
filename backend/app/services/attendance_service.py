@@ -9,14 +9,18 @@ for business-rule violations. Routers should not contain business logic.
 
 from __future__ import annotations
 
-from datetime import datetime, date, timezone
+import logging
+from datetime import datetime, date, timezone, timedelta
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status as http_status
+status = http_status
 from sqlalchemy.orm import Session
 
 from app.models.attendance import Attendance
 from app.models.break_ import Break
 from app.models.employee import Employee
+
+logger = logging.getLogger(__name__)
 
 
 def _today() -> date:
@@ -207,48 +211,66 @@ def end_break(
 def declare_absence(
     db: Session,
     employee_id: int,
-    absence_date: date,
+    start_date: date,
+    end_date: date,
     status: str,
     justification_note: str | None = None,
     override: bool = False,
-) -> Attendance:
-    """Declare an absence for an employee on a specific date.
+) -> list[Attendance]:
+    """Declare an absence for an employee across a date range [start_date, end_date].
 
-    Raises 409 if an attendance record already exists for that employee/date,
-    unless `override=True` is explicitly specified (e.g. authorized early departure/permission).
+    Loops day-by-day from start_date to end_date (inclusive).
+    For each day, creates or updates the Attendance record with the given status.
+    If an existing record is PRESENT and override is False, skips it and logs a warning
+    to prevent crashes or unwanted overwrites.
     """
-    existing = (
-        db.query(Attendance)
-        .filter(
-            Attendance.employee_id == employee_id,
-            Attendance.date == absence_date,
+    if end_date < start_date:
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be before or equal to end_date",
         )
-        .first()
-    )
-    if existing:
-        if not override:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Attendance record already exists for this employee/date",
-            )
-        existing.status = status
-        existing.justification_note = justification_note
-        db.commit()
-        db.refresh(existing)
-        return existing
 
-    attendance = Attendance(
-        employee_id=employee_id,
-        date=absence_date,
-        check_in=None,
-        check_out=None,
-        status=status,
-        justification_note=justification_note,
-    )
-    db.add(attendance)
-    db.commit()
-    db.refresh(attendance)
-    return attendance
+    records: list[Attendance] = []
+    current_date = start_date
+    while current_date <= end_date:
+        existing = (
+            db.query(Attendance)
+            .filter(
+                Attendance.employee_id == employee_id,
+                Attendance.date == current_date,
+            )
+            .first()
+        )
+        if existing:
+            if existing.status == "PRESENT" and not override:
+                logger.warning(
+                    "Skipping absence declaration on %s for employee %s: employee already recorded PRESENT",
+                    current_date,
+                    employee_id,
+                )
+            else:
+                existing.status = status
+                existing.justification_note = justification_note
+                db.commit()
+                db.refresh(existing)
+                records.append(existing)
+        else:
+            attendance = Attendance(
+                employee_id=employee_id,
+                date=current_date,
+                check_in=None,
+                check_out=None,
+                status=status,
+                justification_note=justification_note,
+            )
+            db.add(attendance)
+            db.commit()
+            db.refresh(attendance)
+            records.append(attendance)
+
+        current_date += timedelta(days=1)
+
+    return records
 
 
 def override_status(

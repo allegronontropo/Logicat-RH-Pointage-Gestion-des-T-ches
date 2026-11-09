@@ -269,3 +269,92 @@ def test_justify_absence_admin(client, db_session):
     data = response.json()
     assert data["status"] == "ABSENT_JUSTIFIED"
     assert data["justification_note"] == "Certificat médical fourni"
+
+
+# ---------------------------------------------------------------------------
+# Multi-Day Absence Tests
+# ---------------------------------------------------------------------------
+
+def test_declare_multiday_absence_admin(client, db_session):
+    admin = _make_user(db_session, "admin_multi@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin_token = _make_token(admin)
+    user, employee = _make_employee(db_session, "emp_multi@logicat.ma", "Emp123!")
+
+    # Declare 3-day absence
+    response = client.post(
+        "/api/attendances/absences",
+        json={
+            "employee_id": employee.id,
+            "start_date": "2026-11-10",
+            "end_date": "2026-11-12",
+            "status": "ABSENT_JUSTIFIED",
+            "justification_note": "Congé annuel approuvé",
+        },
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 201
+    records = response.json()
+    assert isinstance(records, list)
+    assert len(records) == 3
+    dates = [r["date"] for r in records]
+    assert dates == ["2026-11-10", "2026-11-11", "2026-11-12"]
+    for r in records:
+        assert r["status"] == "ABSENT_JUSTIFIED"
+        assert r["justification_note"] == "Congé annuel approuvé"
+
+
+def test_declare_multiday_absence_skips_present_without_crash(client, db_session):
+    admin = _make_user(db_session, "admin_skip@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin_token = _make_token(admin)
+    user, employee = _make_employee(db_session, "emp_skip@logicat.ma", "Emp123!")
+
+    # Middle day is already PRESENT
+    existing_att = Attendance(
+        employee_id=employee.id,
+        date=date(2026, 11, 11),
+        status="PRESENT",
+    )
+    db_session.add(existing_att)
+    db_session.commit()
+
+    # Declare absence for 2026-11-10 to 2026-11-12 without override
+    response = client.post(
+        "/api/attendances/absences",
+        json={
+            "employee_id": employee.id,
+            "start_date": "2026-11-10",
+            "end_date": "2026-11-12",
+            "status": "ABSENT_UNJUSTIFIED",
+            "override": False,
+        },
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code == 201
+    records = response.json()
+    # Records returned should only be the ones updated/created (2026-11-10 and 2026-11-12)
+    assert len(records) == 2
+    dates = [r["date"] for r in records]
+    assert "2026-11-11" not in dates
+
+    # Check that 2026-11-11 is still PRESENT
+    db_session.refresh(existing_att)
+    assert existing_att.status == "PRESENT"
+
+
+def test_declare_multiday_absence_invalid_dates(client, db_session):
+    admin = _make_user(db_session, "admin_bad_date@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin_token = _make_token(admin)
+    user, employee = _make_employee(db_session, "emp_bad_date@logicat.ma", "Emp123!")
+
+    # start_date > end_date
+    response = client.post(
+        "/api/attendances/absences",
+        json={
+            "employee_id": employee.id,
+            "start_date": "2026-11-15",
+            "end_date": "2026-11-10",
+            "status": "ABSENT_JUSTIFIED",
+        },
+        headers=_auth_header(admin_token),
+    )
+    assert response.status_code in (400, 422)
