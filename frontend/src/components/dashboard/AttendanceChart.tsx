@@ -11,7 +11,7 @@ import {
 import { ChevronDown, Calendar, Users, TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Mock data structured for 7 days, expandable to real API integration
+// TODO: Replace with real aggregated data when available.
 const MOCK_DATA_7_DAYS = [
   { day: "Lun", date: "03 Nov", present: 18, remote: 2, absent: 1, rate: 95 },
   { day: "Mar", date: "04 Nov", present: 19, remote: 1, absent: 0, rate: 100 },

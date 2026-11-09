@@ -1,5 +1,5 @@
 import React from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 export interface KpiCardProps {
@@ -8,12 +8,7 @@ export interface KpiCardProps {
   icon: React.ElementType;
   iconBgColor?: string;
   iconTextColor?: string;
-  trend?: {
-    value: string;
-    isPositive?: boolean;
-    isNeutral?: boolean;
-    label?: string;
-  };
+  trendText?: string;
   subtitle?: string;
 }
 
@@ -23,7 +18,7 @@ export function KpiCard({
   icon: Icon,
   iconBgColor = "bg-blue-50",
   iconTextColor = "text-blue-600",
-  trend,
+  trendText = "—",
   subtitle,
 }: KpiCardProps) {
   return (
@@ -32,32 +27,16 @@ export function KpiCard({
         <div className="flex items-start justify-between">
           {/* Soft pastel icon */}
           <div
-            className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBgColor} ${iconTextColor} transition-transform duration-200 group-hover:scale-105`}
+            className={`flex h-11 w-11 items-center justify-center rounded-xl ${iconBgColor} ${iconTextColor} transition-transform duration-200`}
           >
             <Icon className="h-5 w-5 stroke-[2.2]" />
           </div>
 
-          {/* Trend Indicator on top right */}
-          {trend && (
-            <div
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                trend.isNeutral
-                  ? "bg-slate-100 text-slate-600 border border-slate-200"
-                  : trend.isPositive
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                  : "bg-rose-50 text-rose-700 border border-rose-200/60"
-              }`}
-            >
-              {trend.isNeutral ? (
-                <Minus className="h-3 w-3 stroke-[2.5]" />
-              ) : trend.isPositive ? (
-                <TrendingUp className="h-3 w-3 stroke-[2.5]" />
-              ) : (
-                <TrendingDown className="h-3 w-3 stroke-[2.5]" />
-              )}
-              <span>{trend.value}</span>
-            </div>
-          )}
+          {/* Subtle neutral indicator without fake percentage */}
+          <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-slate-100/80 text-slate-500 border border-slate-200/60">
+            <Minus className="h-2.5 w-2.5 text-slate-400" />
+            <span className="font-mono">{trendText}</span>
+          </div>
         </div>
 
         {/* Numbers & Labels */}

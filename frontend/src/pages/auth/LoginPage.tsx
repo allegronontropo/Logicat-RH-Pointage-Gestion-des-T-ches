@@ -34,13 +34,13 @@ type LoginFormData = z.infer<typeof loginSchema>;
 const DEMO_ACCOUNTS = [
   {
     label: "Admin 1",
-    email: "admin1@logicat.eu",
+    email: "admin1@logicat.ma",
     password: "Admin123!",
     color: "bg-blue-100 text-blue-800 hover:bg-blue-200",
   },
   {
     label: "Admin 2",
-    email: "admin2@logicat.eu",
+    email: "admin2@logicat.ma",
     password: "Admin123!",
     color: "bg-indigo-100 text-indigo-800 hover:bg-indigo-200",
   },

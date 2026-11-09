@@ -2,11 +2,11 @@
  * src/pages/admin/DashboardPage.tsx
  * ----------------------------------
  * UXPilot-style Admin Dashboard:
- * - 12-column layout (8-9 cols main content, 3-4 cols right sidebar)
- * - 6 Refined KPI Cards with real data from GET /api/dashboard/admin
- * - Attendance Trends Chart with recharts
- * - Recent Activity Feed (Logs) with badges & avatars
- * - Right sidebar: Quick Actions & Pending Approvals
+ * - 12-column responsive layout (8-9 cols main content, 3-4 cols right sidebar)
+ * - 6 Refined KPI Cards wired to real data from GET /api/dashboard/admin (with neutral trends —)
+ * - Attendance Trends Chart with recharts (7-day placeholder with TODO comment)
+ * - Recent Activity Feed (Logs) wired to real data from GET /api/attendances
+ * - Right sidebar: Quick Actions & Recent Absences (real data, no fake approve/deny)
  * - Fully responsive (stacks vertically on mobile)
  */
 
@@ -23,22 +23,49 @@ import {
   Calendar,
 } from "lucide-react";
 import { getAdminDashboard } from "@/api/dashboard";
+import { listAllAttendance } from "@/api/attendances";
 import { useAuth } from "@/auth/useAuth";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { QuickActionsPanel } from "@/components/dashboard/QuickActionsPanel";
-import { PendingApprovals } from "@/components/dashboard/PendingApprovals";
+import { RecentAbsences } from "@/components/dashboard/RecentAbsences";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  // 1. Fetch real KPI metrics from GET /api/dashboard/admin
+  const {
+    data: kpiData,
+    isLoading: isKpiLoading,
+    isError: isKpiError,
+    refetch: refetchKpis,
+    isFetching: isKpiFetching,
+  } = useQuery({
     queryKey: ["admin-dashboard"],
     queryFn: getAdminDashboard,
     refetchInterval: 60_000,
   });
+
+  // 2. Fetch real attendance list from GET /api/attendances
+  const {
+    data: attendancesData = [],
+    isLoading: isAttendancesLoading,
+    refetch: refetchAttendances,
+    isFetching: isAttendancesFetching,
+  } = useQuery({
+    queryKey: ["admin-attendances"],
+    queryFn: () => listAllAttendance(),
+    refetchInterval: 60_000,
+  });
+
+  const isRefreshing = isKpiFetching || isAttendancesFetching;
+
+  function handleRefreshAll() {
+    refetchKpis();
+    refetchAttendances();
+  }
 
   const todayStr = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
@@ -63,20 +90,20 @@ export default function AdminDashboardPage() {
           </div>
           <p className="text-xs text-slate-500 mt-1 capitalize flex items-center gap-1.5">
             <Calendar className="h-3.5 w-3.5 text-slate-400" />
-            {todayStr} • Bienvenue, {user?.first_name} {user?.last_name}
+            {todayStr} • Connecté en tant que {user?.first_name} {user?.last_name}
           </p>
         </div>
 
         {/* Action button to refresh */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => refetch()}
-            disabled={isFetching}
+            onClick={handleRefreshAll}
+            disabled={isRefreshing}
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
           >
             <RotateCw
               className={`h-3.5 w-3.5 text-slate-500 ${
-                isFetching ? "animate-spin" : ""
+                isRefreshing ? "animate-spin" : ""
               }`}
             />
             <span>Actualiser</span>
@@ -85,7 +112,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ── Error Banner if any ──────────────────────────────── */}
-      {isError && (
+      {isKpiError && (
         <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-xs font-medium text-rose-800 flex items-center gap-3">
           <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0" />
           <span>
@@ -99,9 +126,9 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-12 gap-6">
         {/* ── Left / Main Content: 8 or 9 Columns on Desktop ──── */}
         <div className="col-span-12 lg:col-span-8 xl:col-span-9 space-y-6">
-          {/* 6 Refined KPI Cards */}
+          {/* 6 Refined KPI Cards (Wired to Real DB Numbers, Neutral Trends) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {isLoading ? (
+            {isKpiLoading ? (
               Array.from({ length: 6 }).map((_, i) => (
                 <Card
                   key={i}
@@ -123,57 +150,57 @@ export default function AdminDashboardPage() {
               <>
                 <KpiCard
                   title="Employés Actifs"
-                  value={data?.active_employees ?? 0}
+                  value={kpiData?.active_employees ?? 0}
                   icon={Users}
                   iconBgColor="bg-blue-50"
                   iconTextColor="text-blue-600"
-                  trend={{ value: "+4.2%", isPositive: true }}
-                  subtitle="Comptes RH & staff opérationnels"
+                  trendText="—"
+                  subtitle="Comptes employés opérationnels"
                 />
                 <KpiCard
                   title="Présents Aujourd'hui"
-                  value={data?.present_today ?? 0}
+                  value={kpiData?.present_today ?? 0}
                   icon={UserCheck}
                   iconBgColor="bg-emerald-50"
                   iconTextColor="text-emerald-600"
-                  trend={{ value: "98% Taux", isPositive: true }}
-                  subtitle="Check-in validé ce matin"
+                  trendText="—"
+                  subtitle="Pointages enregistrés ce jour"
                 />
                 <KpiCard
                   title="Absences du Jour"
-                  value={data?.absences_today ?? 0}
+                  value={kpiData?.absences_today ?? 0}
                   icon={AlertCircle}
                   iconBgColor="bg-rose-50"
                   iconTextColor="text-rose-600"
-                  trend={{ value: "-12%", isPositive: true }}
-                  subtitle="Absences déclarées ou congés"
+                  trendText="—"
+                  subtitle="Absences justifiées ou injustifiées"
                 />
                 <KpiCard
                   title="Total des Tâches"
-                  value={data?.total_tasks ?? 0}
+                  value={kpiData?.total_tasks ?? 0}
                   icon={CheckSquare}
                   iconBgColor="bg-violet-50"
                   iconTextColor="text-violet-600"
-                  trend={{ value: "+8", isPositive: true }}
-                  subtitle="Assignées dans l'organisation"
+                  trendText="—"
+                  subtitle="Total des tâches de l'équipe"
                 />
                 <KpiCard
                   title="Tâches en Cours"
-                  value={data?.in_progress_tasks ?? 0}
+                  value={kpiData?.in_progress_tasks ?? 0}
                   icon={TrendingUp}
                   iconBgColor="bg-amber-50"
                   iconTextColor="text-amber-600"
-                  trend={{ value: "Actif", isNeutral: true }}
-                  subtitle="En phase de développement / revue"
+                  trendText="—"
+                  subtitle="En cours d'exécution"
                 />
                 <KpiCard
                   title="Tâches Terminées"
-                  value={data?.done_tasks ?? 0}
+                  value={kpiData?.done_tasks ?? 0}
                   icon={Clock}
                   iconBgColor="bg-teal-50"
                   iconTextColor="text-teal-600"
-                  trend={{ value: "+14", isPositive: true }}
-                  subtitle="Livrées avec succès"
+                  trendText="—"
+                  subtitle="Complétées avec succès"
                 />
               </>
             )}
@@ -182,8 +209,11 @@ export default function AdminDashboardPage() {
           {/* Attendance Trends Chart */}
           <AttendanceChart />
 
-          {/* Recent Logs & Activity Feed */}
-          <RecentActivityFeed />
+          {/* Recent Logs & Activity Feed (Real Attendances Data) */}
+          <RecentActivityFeed
+            attendances={attendancesData}
+            isLoading={isAttendancesLoading}
+          />
         </div>
 
         {/* ── Right Sidebar: 3 or 4 Columns on Desktop ────────── */}
@@ -191,8 +221,11 @@ export default function AdminDashboardPage() {
           {/* Quick Actions Panel */}
           <QuickActionsPanel />
 
-          {/* Pending Approvals Panel */}
-          <PendingApprovals />
+          {/* Absences Récentes (Real DB Data, No Fake Approve/Deny Buttons) */}
+          <RecentAbsences
+            attendances={attendancesData}
+            isLoading={isAttendancesLoading}
+          />
 
           {/* System & Compliance Mini Card */}
           <Card className="border border-slate-200/90 bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-sm overflow-hidden">
@@ -207,12 +240,12 @@ export default function AdminDashboardPage() {
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Synchronisation PostgreSQL active. Serveur UTC aligné sur le
-                fuseau Casablanca.
+                Synchronisation PostgreSQL active. Heure serveur UTC alignée sur
+                le fuseau Casablanca.
               </p>
               <div className="pt-1 text-[10px] text-slate-400 flex items-center justify-between border-t border-slate-700/60">
                 <span>FastAPI 0.3.0</span>
-                <span>React 18 + Vite</span>
+                <span>Données Réelles</span>
               </div>
             </CardContent>
           </Card>

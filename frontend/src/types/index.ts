@@ -58,9 +58,19 @@ export interface BreakSummary {
   end_time: string | null;
 }
 
+export interface EmployeeSummary {
+  id: number;
+  first_name: string;
+  last_name: string;
+  department: string | null;
+  position: string | null;
+}
+
 export interface Attendance {
   id: number;
   employee_id: number;
+  employee_name?: string | null;
+  employee?: EmployeeSummary | null;
   date: string;
   check_in: string | null;
   check_out: string | null;
