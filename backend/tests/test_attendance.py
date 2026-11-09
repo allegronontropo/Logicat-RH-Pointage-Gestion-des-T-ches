@@ -358,3 +358,42 @@ def test_declare_multiday_absence_invalid_dates(client, db_session):
         headers=_auth_header(admin_token),
     )
     assert response.status_code in (400, 422)
+
+
+def test_export_employee_attendance_csv(client, db_session):
+    admin = _make_user(db_session, "admin_export@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin_token = _make_token(admin)
+    user, employee = _make_employee(db_session, "emp_export@logicat.ma", "Emp123!")
+    emp_token = _make_token(user)
+
+    # Create an attendance record
+    att = Attendance(
+        employee_id=employee.id,
+        date=date(2026, 11, 1),
+        check_in=datetime(2026, 11, 1, 9, 0, 0, tzinfo=timezone.utc),
+        check_out=datetime(2026, 11, 1, 18, 0, 0, tzinfo=timezone.utc),
+        status="PRESENT",
+    )
+    db_session.add(att)
+    db_session.commit()
+
+    # Admin request
+    resp = client.get(
+        f"/api/attendances/export/{employee.id}",
+        headers=_auth_header(admin_token),
+    )
+    assert resp.status_code == 200
+    assert "text/csv" in resp.headers.get("content-type", "")
+    assert "attachment; filename=attendance.csv" in resp.headers.get("content-disposition", "")
+    content = resp.text
+    assert "Date,Check-in,Check-out,Total Breaks,Effective Hours,Status" in content
+    assert "2026-11-01" in content
+    assert "PRESENT" in content
+
+    # Non-admin request should be forbidden
+    resp_emp = client.get(
+        f"/api/attendances/export/{employee.id}",
+        headers=_auth_header(emp_token),
+    )
+    assert resp_emp.status_code == 403
+

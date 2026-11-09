@@ -18,8 +18,11 @@ from __future__ import annotations
 
 from typing import Annotated
 from datetime import date
+import csv
+import io
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_current_employee, get_current_user, require_admin, get_db
@@ -279,6 +282,81 @@ def justify_absence_endpoint(
         .first()
     )
     return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.get(
+    "/export/{employee_id}",
+    summary="Export employee attendance to CSV",
+    description="Admin: export attendance records for an employee to CSV.",
+)
+def export_employee_attendance_csv(
+    employee_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+    month: str | None = Query(default=None, description="Filter by month (YYYY-MM)"),
+) -> StreamingResponse:
+    # Resolve employee: supports both employee.id or user.id
+    employee = (
+        db.query(Employee)
+        .filter((Employee.id == employee_id) | (Employee.user_id == employee_id))
+        .first()
+    )
+    target_emp_id = employee.id if employee else employee_id
+
+    query = (
+        db.query(Attendance)
+        .options(joinedload(Attendance.breaks))
+        .filter(Attendance.employee_id == target_emp_id)
+    )
+
+    if month:
+        try:
+            parts = month.split("-")
+            year = int(parts[0])
+            m = int(parts[1])
+            import calendar
+            _, last_day = calendar.monthrange(year, m)
+            start_d = date(year, m, 1)
+            end_d = date(year, m, last_day)
+            query = query.filter(Attendance.date >= start_d, Attendance.date <= end_d)
+        except Exception:
+            pass
+
+    attendances = query.order_by(Attendance.date.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Date",
+        "Check-in",
+        "Check-out",
+        "Total Breaks",
+        "Effective Hours",
+        "Status",
+    ])
+
+    for att in attendances:
+        _, break_mins, eff_mins = attendance_service.calculate_durations(att)
+        check_in_str = att.check_in.strftime("%H:%M:%S") if att.check_in else ""
+        check_out_str = att.check_out.strftime("%H:%M:%S") if att.check_out else ""
+        break_str = f"{break_mins // 60}h {break_mins % 60:02d}m" if break_mins > 0 else "0h 00m"
+        eff_str = f"{eff_mins // 60}h {eff_mins % 60:02d}m" if eff_mins > 0 else "0h 00m"
+
+        writer.writerow([
+            att.date.isoformat(),
+            check_in_str,
+            check_out_str,
+            break_str,
+            eff_str,
+            att.status,
+        ])
+
+    csv_content = output.getvalue()
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=attendance.csv"},
+    )
 
 
 @router.get(

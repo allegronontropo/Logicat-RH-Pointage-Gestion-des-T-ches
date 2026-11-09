@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -21,7 +21,18 @@ import {
   ArrowRight,
   TrendingUp,
   X,
+  Download,
+  Plus,
+  PieChart as PieChartIcon,
 } from "lucide-react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,10 +59,12 @@ import {
   deactivateUser,
   activateUser,
   resetPassword,
+  listUsers,
   type UserUpdatePayload,
 } from "@/api/users";
-import { listTasks } from "@/api/tasks";
+import { listTasks, createTask, type TaskCreatePayload } from "@/api/tasks";
 import { listAllAttendance } from "@/api/attendances";
+import { apiClient } from "@/api/client";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 export default function UserDetailPage() {
@@ -89,6 +102,21 @@ export default function UserDetailPage() {
   // Action loading state
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
 
+  // Export CSV State
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Quick Assign Task State
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  const [createTaskForm, setCreateTaskForm] = useState<TaskCreatePayload>({
+    title: "",
+    description: "",
+    priority: "MEDIUM",
+    due_date: "",
+    assigned_to: 0,
+  });
+  const [createTaskError, setCreateTaskError] = useState<string | null>(null);
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+
   // 1. Fetch User Detail
   const {
     data: user,
@@ -105,7 +133,11 @@ export default function UserDetailPage() {
   const isEmployee = user?.role === "EMPLOYEE";
 
   // 2. Fetch Tasks (only if employee has an employee_id)
-  const { data: tasks = [], isLoading: isTasksLoading } = useQuery({
+  const {
+    data: tasks = [],
+    isLoading: isTasksLoading,
+    refetch: refetchTasks,
+  } = useQuery({
     queryKey: ["admin-user-tasks", employeeId],
     queryFn: () => listTasks({ assigned_to: employeeId! }),
     enabled: Boolean(employeeId),
@@ -118,6 +150,13 @@ export default function UserDetailPage() {
     enabled: Boolean(employeeId),
   });
 
+  // 4. Fetch all employees for task assignment dropdown
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["users", "EMPLOYEE"],
+    queryFn: () => listUsers({ role: "EMPLOYEE" }),
+    enabled: isEmployee,
+  });
+
   // Task metrics
   const totalTasks = tasks.length;
   const inProgressTasks = tasks.filter((t) => t.status === "IN_PROGRESS").length;
@@ -125,6 +164,190 @@ export default function UserDetailPage() {
 
   // Recent 5 attendances
   const recentAttendances = attendances.slice(0, 5);
+
+  // Time Breakdown Calculation
+  const timeBreakdown = useMemo(() => {
+    let totalEffective = 0;
+    let totalLunch = 0;
+    let totalMorningAfternoon = 0;
+
+    attendances.forEach((att) => {
+      totalEffective += att.effective_minutes || 0;
+      (att.breaks || []).forEach((b) => {
+        if (b.start_time && b.end_time) {
+          const start = new Date(b.start_time).getTime();
+          const end = new Date(b.end_time).getTime();
+          const mins = Math.max(0, Math.round((end - start) / 60000));
+          if (b.type === "LUNCH") {
+            totalLunch += mins;
+          } else {
+            totalMorningAfternoon += mins;
+          }
+        }
+      });
+    });
+
+    const total = totalEffective + totalLunch + totalMorningAfternoon;
+
+    const formatMins = (m: number) => {
+      const h = Math.floor(m / 60);
+      const rem = m % 60;
+      return `${h}h ${rem < 10 ? "0" : ""}${rem}m`;
+    };
+
+    if (total === 0) {
+      return [
+        {
+          name: "Travail Effectif",
+          value: 80,
+          displayValue: "80%",
+          durationText: "80% (estimation)",
+          color: "#10b981",
+        },
+        {
+          name: "Pause Déjeuner",
+          value: 15,
+          displayValue: "15%",
+          durationText: "15% (estimation)",
+          color: "#f59e0b",
+        },
+        {
+          name: "Pauses Matin/Soir",
+          value: 5,
+          displayValue: "5%",
+          durationText: "5% (estimation)",
+          color: "#3b82f6",
+        },
+      ];
+    }
+
+    const effPercent = Math.max(1, Math.round((totalEffective / total) * 100));
+    const lunchPercent = Math.round((totalLunch / total) * 100);
+    const otherPercent = Math.max(0, 100 - effPercent - lunchPercent);
+
+    return [
+      {
+        name: "Travail Effectif",
+        value: effPercent,
+        displayValue: `${effPercent}% (${formatMins(totalEffective)})`,
+        durationText: formatMins(totalEffective),
+        color: "#10b981",
+      },
+      {
+        name: "Pause Déjeuner",
+        value: lunchPercent,
+        displayValue: `${lunchPercent}% (${formatMins(totalLunch)})`,
+        durationText: formatMins(totalLunch),
+        color: "#f59e0b",
+      },
+      {
+        name: "Pauses Matin/Soir",
+        value: otherPercent,
+        displayValue: `${otherPercent}% (${formatMins(totalMorningAfternoon)})`,
+        durationText: formatMins(totalMorningAfternoon),
+        color: "#3b82f6",
+      },
+    ];
+  }, [attendances]);
+
+  // ── CSV Download Logic ───────────────────────────────────────────
+  async function handleExportCSV() {
+    const targetId = employeeId || user?.employee_id || userId;
+    if (!targetId) return;
+
+    setIsExporting(true);
+    try {
+      const response = await apiClient.get(
+        `/api/attendances/export/${targetId}`,
+        {
+          responseType: "blob",
+        }
+      );
+      const blob = new Blob([response.data], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const safeName = `${user?.first_name || "employe"}_${user?.last_name || targetId}`
+        .toLowerCase()
+        .replace(/\s+/g, "_");
+      link.setAttribute("download", `attendance_${safeName}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      setFeedback({
+        type: "success",
+        message: "Fichier CSV des pointages téléchargé avec succès.",
+      });
+    } catch (err: unknown) {
+      setFeedback({
+        type: "error",
+        message: "Erreur lors de l'exportation du fichier CSV.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  // ── Open Quick Task Creation ─────────────────────────────────────
+  function handleOpenCreateTask() {
+    const targetEmpId = employeeId || user?.employee_id || userId || 0;
+    setCreateTaskForm({
+      title: "",
+      description: "",
+      priority: "MEDIUM",
+      due_date: "",
+      assigned_to: targetEmpId,
+    });
+    setCreateTaskError(null);
+    setIsCreateTaskOpen(true);
+  }
+
+  // ── Submit Quick Task Creation ───────────────────────────────────
+  async function handleSubmitCreateTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!createTaskForm.title.trim()) {
+      setCreateTaskError("Le titre de la tâche est obligatoire.");
+      return;
+    }
+    if (!createTaskForm.assigned_to) {
+      setCreateTaskError("Veuillez sélectionner un collaborateur.");
+      return;
+    }
+
+    setIsCreatingTask(true);
+    setCreateTaskError(null);
+    try {
+      await createTask({
+        title: createTaskForm.title.trim(),
+        description: createTaskForm.description?.trim() || undefined,
+        priority: createTaskForm.priority,
+        due_date: createTaskForm.due_date || undefined,
+        assigned_to: Number(createTaskForm.assigned_to),
+      });
+
+      await refetchTasks();
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-user-tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      setFeedback({
+        type: "success",
+        message: `La tâche « ${createTaskForm.title} » a été assignée avec succès à ${user?.first_name} ${user?.last_name}.`,
+      });
+      setIsCreateTaskOpen(false);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Erreur lors de la création de la tâche.";
+      setCreateTaskError(typeof msg === "string" ? msg : "Opération refusée.");
+    } finally {
+      setIsCreatingTask(false);
+    }
+  }
 
   // ── Open Edit Modal ─────────────────────────────────────────────
   function handleOpenEdit() {
@@ -323,7 +546,35 @@ export default function UserDetailPage() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isEmployee && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCSV}
+                disabled={isExporting}
+                className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 gap-1.5 shadow-2xs"
+              >
+                {isExporting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                ) : (
+                  <Download className="h-3.5 w-3.5 text-slate-500" />
+                )}
+                <span>Exporter CSV</span>
+              </Button>
+
+              <Button
+                onClick={handleOpenCreateTask}
+                size="sm"
+                className="h-9 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Assigner une tâche</span>
+              </Button>
+            </>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -573,13 +824,24 @@ export default function UserDetailPage() {
                       Vue synthétique du travail confié à ce collaborateur
                     </p>
                   </div>
-                  <Link
-                    to="/admin/tasks"
-                    className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-blue-800 transition"
-                  >
-                    <span>Gérer les tâches</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={handleOpenCreateTask}
+                      size="sm"
+                      variant="outline"
+                      className="h-8 px-2.5 text-xs font-semibold text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100/70 border-emerald-200 gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Assigner</span>
+                    </Button>
+                    <Link
+                      to="/admin/tasks"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-blue-800 transition"
+                    >
+                      <span>Gérer</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
                 </CardHeader>
 
                 <CardContent className="pt-5 pb-5">
@@ -694,7 +956,113 @@ export default function UserDetailPage() {
                 </CardContent>
               </Card>
 
-              {/* 2. Attendance History Mini-Table */}
+              {/* 2. Visual Time Breakdown (Recharts Donut) */}
+              <Card className="border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+                <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                      <PieChartIcon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-900">
+                        Répartition du temps
+                      </CardTitle>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Ventilation entre travail effectif et temps de pause
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExportCSV}
+                    disabled={isExporting}
+                    className="h-8 px-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5 text-slate-500" />
+                    <span>Exporter CSV</span>
+                  </Button>
+                </CardHeader>
+
+                <CardContent className="pt-6 pb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                    {/* Donut Chart */}
+                    <div className="md:col-span-6 flex items-center justify-center h-[220px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={timeBreakdown}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={50}
+                            outerRadius={75}
+                            paddingAngle={4}
+                            dataKey="value"
+                          >
+                            {timeBreakdown.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: any, name: any, item: any) => [
+                              item.payload.displayValue || `${value}%`,
+                              name,
+                            ]}
+                            contentStyle={{
+                              backgroundColor: "#0f172a",
+                              color: "#fff",
+                              borderRadius: "8px",
+                              fontSize: "12px",
+                              border: "none",
+                              padding: "8px 12px",
+                            }}
+                            itemStyle={{ color: "#fff" }}
+                          />
+                          <Legend
+                            verticalAlign="bottom"
+                            height={32}
+                            iconType="circle"
+                            iconSize={8}
+                            wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Time Breakdown Metrics Details */}
+                    <div className="md:col-span-6 space-y-2.5">
+                      {timeBreakdown.map((item) => (
+                        <div
+                          key={item.name}
+                          className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span
+                              className="h-3 w-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-xs font-semibold text-slate-700">
+                              {item.name}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-slate-900">
+                              {item.value}%
+                            </span>
+                            {item.durationText && (
+                              <span className="text-[10px] text-slate-400 block font-medium">
+                                {item.durationText}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 3. Attendance History Mini-Table */}
               <Card className="border border-slate-200/90 bg-white shadow-sm overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-100">
                   <div>
@@ -1071,6 +1439,204 @@ export default function UserDetailPage() {
                   <>
                     <KeyRound className="h-3.5 w-3.5" />
                     Mettre à jour le mot de passe
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MODAL 3: Quick Assign Task Dialog ──────────────────── */}
+      <Dialog open={isCreateTaskOpen} onOpenChange={setIsCreateTaskOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                <CheckSquare className="h-4 w-4" />
+              </div>
+              <DialogTitle>Assigner une Tâche</DialogTitle>
+            </div>
+            <DialogDescription>
+              Créez et assignez une mission directement à{" "}
+              <span className="font-semibold text-slate-800">
+                {user.first_name} {user.last_name}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitCreateTask} className="space-y-4 py-2">
+            {createTaskError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <span>{createTaskError}</span>
+              </div>
+            )}
+
+            {/* Titre */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="passport-task-title"
+                className="text-xs font-semibold text-slate-700"
+              >
+                Titre de la tâche *
+              </Label>
+              <Input
+                id="passport-task-title"
+                required
+                placeholder="ex. Réviser la documentation technique..."
+                value={createTaskForm.title}
+                onChange={(e) =>
+                  setCreateTaskForm({ ...createTaskForm, title: e.target.value })
+                }
+                autoFocus
+                className="text-xs h-9"
+              />
+            </div>
+
+            {/* Description */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="passport-task-desc"
+                className="text-xs font-semibold text-slate-700"
+              >
+                Description détaillée
+              </Label>
+              <textarea
+                id="passport-task-desc"
+                rows={3}
+                placeholder="Précisez les consignes, les livrables attendus..."
+                value={createTaskForm.description || ""}
+                onChange={(e) =>
+                  setCreateTaskForm({
+                    ...createTaskForm,
+                    description: e.target.value,
+                  })
+                }
+                className="w-full rounded-md border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            {/* Assignee & Priority */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="passport-task-assignee"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Assigné à *
+                </Label>
+                <select
+                  id="passport-task-assignee"
+                  required
+                  value={createTaskForm.assigned_to}
+                  onChange={(e) =>
+                    setCreateTaskForm({
+                      ...createTaskForm,
+                      assigned_to: Number(e.target.value),
+                    })
+                  }
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+                >
+                  {/* Current user pre-filled */}
+                  {user && (
+                    <option value={employeeId || user.employee_id || user.id}>
+                      {user.first_name} {user.last_name}{" "}
+                      {user.department ? `(${user.department})` : ""} [Cet employé]
+                    </option>
+                  )}
+                  {allUsers
+                    .filter(
+                      (u) =>
+                        (u.employee_id || u.id) !==
+                        (employeeId || user?.employee_id || user?.id)
+                    )
+                    .map((emp) => {
+                      const empId = emp.employee_id || emp.id;
+                      return (
+                        <option key={emp.id} value={empId}>
+                          {emp.first_name} {emp.last_name}{" "}
+                          {emp.department ? `(${emp.department})` : ""}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="passport-task-prio"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Priorité *
+                </Label>
+                <select
+                  id="passport-task-prio"
+                  value={createTaskForm.priority}
+                  onChange={(e) =>
+                    setCreateTaskForm({
+                      ...createTaskForm,
+                      priority: e.target.value as "LOW" | "MEDIUM" | "HIGH",
+                    })
+                  }
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+                >
+                  <option value="LOW">Basse</option>
+                  <option value="MEDIUM">Moyenne</option>
+                  <option value="HIGH">Haute</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Due Date */}
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="passport-task-due"
+                className="text-xs font-semibold text-slate-700"
+              >
+                Date d'échéance
+              </Label>
+              <Input
+                id="passport-task-due"
+                type="date"
+                value={createTaskForm.due_date || ""}
+                onChange={(e) =>
+                  setCreateTaskForm({
+                    ...createTaskForm,
+                    due_date: e.target.value,
+                  })
+                }
+                className="text-xs h-9"
+              />
+            </div>
+
+            <DialogFooter className="pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCreateTaskOpen(false)}
+                disabled={isCreatingTask}
+                className="text-xs"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isCreatingTask}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5"
+              >
+                {isCreatingTask ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Attribution en cours…
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3.5 w-3.5" />
+                    Assigner la tâche
                   </>
                 )}
               </Button>
