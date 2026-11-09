@@ -3,7 +3,12 @@ import { UserPlus, PlusCircle, CalendarX, FileText } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-export function QuickActionsPanel() {
+interface QuickActionsPanelProps {
+  onAddEmployee?: () => void;
+  onAssignTask?: () => void;
+}
+
+export function QuickActionsPanel({ onAddEmployee, onAssignTask }: QuickActionsPanelProps = {}) {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   function handleAction(name: string, url: string) {
@@ -36,7 +41,13 @@ export function QuickActionsPanel() {
 
         {/* Primary Action: Add Employee */}
         <Button
-          onClick={() => handleAction("Ajout Employé", "/admin/users")}
+          onClick={() => {
+            if (onAddEmployee) {
+              onAddEmployee();
+            } else {
+              handleAction("Ajout Employé", "/admin/users");
+            }
+          }}
           className="w-full justify-start gap-2.5 bg-primary hover:bg-blue-800 text-white font-medium shadow-sm transition-all h-10"
         >
           <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white/20">
@@ -47,7 +58,13 @@ export function QuickActionsPanel() {
 
         {/* Secondary Action: Assign Task */}
         <Button
-          onClick={() => handleAction("Nouvelle Tâche", "/admin/tasks")}
+          onClick={() => {
+            if (onAssignTask) {
+              onAssignTask();
+            } else {
+              handleAction("Nouvelle Tâche", "/admin/tasks");
+            }
+          }}
           variant="outline"
           className="w-full justify-start gap-2.5 border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700 font-medium h-10 transition-colors"
         >

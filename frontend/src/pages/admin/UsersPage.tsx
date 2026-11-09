@@ -52,15 +52,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/auth/useAuth";
 import {
   listUsers,
-  createUser,
   updateUser,
   deactivateUser,
   activateUser,
   resetPassword,
-  type UserCreatePayload,
   type UserUpdatePayload,
 } from "@/api/users";
 import type { UserDetail } from "@/types";
+import { CreateUserModal } from "@/components/shared/CreateUserModal";
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
@@ -84,21 +83,6 @@ export default function UsersPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserDetail | null>(null);
   const [resetPwdUser, setResetPwdUser] = useState<UserDetail | null>(null);
-
-  // Form States - Create User
-  const [createForm, setCreateForm] = useState<UserCreatePayload>({
-    first_name: "",
-    last_name: "",
-    email: "",
-    password: "",
-    phone: "",
-    role: "EMPLOYEE",
-    department: "Ingénierie",
-    position: "Développeur",
-    hire_date: new Date().toISOString().split("T")[0],
-  });
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
 
   // Form States - Edit User
   const [editForm, setEditForm] = useState<UserUpdatePayload>({
@@ -172,77 +156,7 @@ export default function UsersPage() {
 
   // ── Open Create Modal ───────────────────────────────────────────
   function handleOpenCreate() {
-    setCreateForm({
-      first_name: "",
-      last_name: "",
-      email: "",
-      password: "",
-      phone: "",
-      role: "EMPLOYEE",
-      department: "Ingénierie",
-      position: "Développeur",
-      hire_date: new Date().toISOString().split("T")[0],
-    });
-    setCreateError(null);
     setIsCreateOpen(true);
-  }
-
-  // ── Submit Create User ──────────────────────────────────────────
-  async function handleSubmitCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setCreateError(null);
-
-    if (!createForm.first_name.trim() || !createForm.last_name.trim()) {
-      setCreateError("Le prénom et le nom sont obligatoires.");
-      return;
-    }
-    if (!createForm.email.trim()) {
-      setCreateError("L'adresse email est obligatoire.");
-      return;
-    }
-    if (!createForm.password || createForm.password.length < 8) {
-      setCreateError("Le mot de passe doit comporter au moins 8 caractères.");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      const payload: UserCreatePayload = {
-        ...createForm,
-        first_name: createForm.first_name.trim(),
-        last_name: createForm.last_name.trim(),
-        email: createForm.email.trim(),
-        phone: createForm.phone?.trim() || undefined,
-        department:
-          createForm.role === "EMPLOYEE"
-            ? createForm.department?.trim() || undefined
-            : undefined,
-        position:
-          createForm.role === "EMPLOYEE"
-            ? createForm.position?.trim() || undefined
-            : undefined,
-        hire_date:
-          createForm.role === "EMPLOYEE"
-            ? createForm.hire_date || undefined
-            : undefined,
-      };
-
-      await createUser(payload);
-      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      setIsCreateOpen(false);
-      setFeedback({
-        type: "success",
-        message: `L'utilisateur ${payload.first_name} ${payload.last_name} a été créé avec succès.`,
-      });
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Erreur lors de la création de l'utilisateur.";
-      setCreateError(typeof msg === "string" ? msg : JSON.stringify(msg));
-    } finally {
-      setIsCreating(false);
-    }
   }
 
   // ── Open Edit Modal ─────────────────────────────────────────────
@@ -823,236 +737,18 @@ export default function UsersPage() {
       </Card>
 
       {/* ── MODAL 1: Create User Dialog ─────────────────────────── */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
-                <UserPlus className="h-4 w-4" />
-              </div>
-              <DialogTitle>Ajouter un Utilisateur</DialogTitle>
-            </div>
-            <DialogDescription>
-              Créez un nouveau compte avec son rôle et son profil associé.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmitCreate} className="space-y-4 py-2">
-            {createError && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                <span>{createError}</span>
-              </div>
-            )}
-
-            {/* Prénom & Nom */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="create-fn" className="text-xs font-semibold text-slate-700">
-                  Prénom *
-                </Label>
-                <Input
-                  id="create-fn"
-                  required
-                  placeholder="Ex : Sara"
-                  value={createForm.first_name}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, first_name: e.target.value })
-                  }
-                  className="text-xs h-9"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="create-ln" className="text-xs font-semibold text-slate-700">
-                  Nom *
-                </Label>
-                <Input
-                  id="create-ln"
-                  required
-                  placeholder="Ex : Bennani"
-                  value={createForm.last_name}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, last_name: e.target.value })
-                  }
-                  className="text-xs h-9"
-                />
-              </div>
-            </div>
-
-            {/* Email & Mot de passe */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="create-email" className="text-xs font-semibold text-slate-700">
-                  Email professionnel *
-                </Label>
-                <Input
-                  id="create-email"
-                  type="email"
-                  required
-                  placeholder="prenom.nom@logicat.ma"
-                  value={createForm.email}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, email: e.target.value })
-                  }
-                  className="text-xs h-9"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="create-pwd" className="text-xs font-semibold text-slate-700">
-                  Mot de passe provisoire *
-                </Label>
-                <Input
-                  id="create-pwd"
-                  type="password"
-                  required
-                  placeholder="Min 8 caractères"
-                  value={createForm.password}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, password: e.target.value })
-                  }
-                  className="text-xs h-9"
-                />
-              </div>
-            </div>
-
-            {/* Téléphone & Rôle */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="create-phone" className="text-xs font-semibold text-slate-700">
-                  Téléphone
-                </Label>
-                <Input
-                  id="create-phone"
-                  placeholder="+212 6..."
-                  value={createForm.phone}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, phone: e.target.value })
-                  }
-                  className="text-xs h-9"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="create-role" className="text-xs font-semibold text-slate-700">
-                  Rôle *
-                </Label>
-                <select
-                  id="create-role"
-                  value={createForm.role}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      role: e.target.value as "ADMIN_RH" | "EMPLOYEE",
-                    })
-                  }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
-                >
-                  <option value="EMPLOYEE">Employé</option>
-                  <option value="ADMIN_RH">Admin RH</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Conditional Fields for EMPLOYEE */}
-            {createForm.role === "EMPLOYEE" && (
-              <div className="rounded-xl bg-slate-50 p-3.5 border border-slate-200/80 space-y-3">
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Profil Employé
-                </p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label htmlFor="create-dept" className="text-xs font-semibold text-slate-700">
-                      Département
-                    </Label>
-                    <Input
-                      id="create-dept"
-                      placeholder="Ex : Ingénierie, RH, Finance"
-                      value={createForm.department}
-                      onChange={(e) =>
-                        setCreateForm({
-                          ...createForm,
-                          department: e.target.value,
-                        })
-                      }
-                      className="text-xs h-8 bg-white"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="create-pos" className="text-xs font-semibold text-slate-700">
-                      Poste / Fonction
-                    </Label>
-                    <Input
-                      id="create-pos"
-                      placeholder="Ex : Développeur Fullstack"
-                      value={createForm.position}
-                      onChange={(e) =>
-                        setCreateForm({
-                          ...createForm,
-                          position: e.target.value,
-                        })
-                      }
-                      className="text-xs h-8 bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="create-hire" className="text-xs font-semibold text-slate-700">
-                    Date d'embauche
-                  </Label>
-                  <Input
-                    id="create-hire"
-                    type="date"
-                    value={createForm.hire_date}
-                    onChange={(e) =>
-                      setCreateForm({
-                        ...createForm,
-                        hire_date: e.target.value,
-                      })
-                    }
-                    className="text-xs h-8 bg-white"
-                  />
-                </div>
-              </div>
-            )}
-
-            <DialogFooter className="pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreateOpen(false)}
-                disabled={isCreating}
-                className="text-xs"
-              >
-                Annuler
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isCreating}
-                className="bg-primary hover:bg-blue-800 text-white text-xs gap-1.5"
-              >
-                {isCreating ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Création en cours…
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="h-3.5 w-3.5" />
-                    Créer l'utilisateur
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateUserModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={async (userName) => {
+          await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+          await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          setFeedback({
+            type: "success",
+            message: `L'utilisateur ${userName} a été créé avec succès.`,
+          });
+        }}
+      />
 
       {/* ── MODAL 2: Edit User Dialog ───────────────────────────── */}
       <Dialog

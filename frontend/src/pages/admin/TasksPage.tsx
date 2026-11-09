@@ -49,16 +49,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   listTasks,
-  createTask,
   updateTask,
   deleteTask,
-  type TaskCreatePayload,
   type TaskUpdatePayload,
 } from "@/api/tasks";
 import { listUsers } from "@/api/users";
 import { formatDate } from "@/lib/utils";
 import type { Task } from "@/types";
 import { EmployeeCombobox, type EmployeeOption } from "@/components/shared/EmployeeCombobox";
+import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
@@ -80,15 +79,6 @@ export default function TasksPage() {
 
   // Modal: Create Task
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState<TaskCreatePayload>({
-    title: "",
-    description: "",
-    priority: "MEDIUM",
-    due_date: "",
-    assigned_to: 0,
-  });
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
 
   // Modal: Edit Task
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -265,62 +255,7 @@ export default function TasksPage() {
 
   // ── Open Create Modal ───────────────────────────────────────────
   function handleOpenCreate() {
-    const defaultEmpId =
-      employees[0]?.employee_profile?.id ||
-      employees[0]?.employee_id ||
-      employees[0]?.id ||
-      0;
-
-    setCreateForm({
-      title: "",
-      description: "",
-      priority: "MEDIUM",
-      due_date: "",
-      assigned_to: defaultEmpId,
-    });
-    setCreateError(null);
     setIsCreateOpen(true);
-  }
-
-  // ── Submit Create Task ──────────────────────────────────────────
-  async function handleSubmitCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setCreateError(null);
-
-    if (!createForm.title.trim()) {
-      setCreateError("Le titre de la tâche est obligatoire.");
-      return;
-    }
-    if (!createForm.assigned_to) {
-      setCreateError("Veuillez assigner la tâche à un collaborateur.");
-      return;
-    }
-
-    setIsCreating(true);
-    try {
-      await createTask({
-        title: createForm.title.trim(),
-        description: createForm.description?.trim() || undefined,
-        priority: createForm.priority,
-        due_date: createForm.due_date || undefined,
-        assigned_to: Number(createForm.assigned_to),
-      });
-
-      await refetch();
-      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      setIsCreateOpen(false);
-      setFeedback({
-        type: "success",
-        message: `La tâche « ${createForm.title} » a été créée avec succès.`,
-      });
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail || "Erreur lors de la création de la tâche.";
-      setCreateError(typeof msg === "string" ? msg : JSON.stringify(msg));
-    } finally {
-      setIsCreating(false);
-    }
   }
 
   // ── Open Edit Modal ─────────────────────────────────────────────
@@ -1073,148 +1008,18 @@ export default function TasksPage() {
       </Card>
 
       {/* ── MODAL 1: Create Task Dialog ─────────────────────────── */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <div className="flex items-center gap-2 mb-1">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
-                <CheckSquare className="h-4 w-4" />
-              </div>
-              <DialogTitle>Créer une Tâche</DialogTitle>
-            </div>
-            <DialogDescription>
-              Assignez une nouvelle mission professionnelle à un collaborateur.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmitCreate} className="space-y-4 py-2">
-            {createError && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
-                <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                <span>{createError}</span>
-              </div>
-            )}
-
-            {/* Titre */}
-            <div className="space-y-1.5">
-              <Label htmlFor="task-title" className="text-xs font-semibold text-slate-700">
-                Titre de la tâche *
-              </Label>
-              <Input
-                id="task-title"
-                required
-                placeholder="Ex : Révision du rapport de clôture mensuelle"
-                value={createForm.title}
-                onChange={(e) =>
-                  setCreateForm({ ...createForm, title: e.target.value })
-                }
-                className="text-xs h-9"
-              />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-1.5">
-              <Label htmlFor="task-desc" className="text-xs font-semibold text-slate-700">
-                Description détaillée
-              </Label>
-              <textarea
-                id="task-desc"
-                rows={3}
-                placeholder="Précisez les livrables, consignes ou contexte de la mission..."
-                value={createForm.description || ""}
-                onChange={(e) =>
-                  setCreateForm({ ...createForm, description: e.target.value })
-                }
-                className="w-full rounded-md border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            {/* Assignee & Priority */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="task-assignee" className="text-xs font-semibold text-slate-700">
-                  Assigné à *
-                </Label>
-                <EmployeeCombobox
-                  value={createForm.assigned_to}
-                  onChange={(id) =>
-                    setCreateForm({ ...createForm, assigned_to: id })
-                  }
-                  employees={employeeOptions}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="task-prio" className="text-xs font-semibold text-slate-700">
-                  Priorité *
-                </Label>
-                <select
-                  id="task-prio"
-                  value={createForm.priority}
-                  onChange={(e) =>
-                    setCreateForm({
-                      ...createForm,
-                      priority: e.target.value as "LOW" | "MEDIUM" | "HIGH",
-                    })
-                  }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
-                >
-                  <option value="LOW">Basse</option>
-                  <option value="MEDIUM">Moyenne</option>
-                  <option value="HIGH">Haute</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Due Date */}
-            <div className="space-y-1.5">
-              <Label htmlFor="task-due" className="text-xs font-semibold text-slate-700">
-                Date d'échéance
-              </Label>
-              <Input
-                id="task-due"
-                type="date"
-                value={createForm.due_date || ""}
-                onChange={(e) =>
-                  setCreateForm({ ...createForm, due_date: e.target.value })
-                }
-                className="text-xs h-9"
-              />
-            </div>
-
-            <DialogFooter className="pt-3">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCreateOpen(false)}
-                disabled={isCreating}
-                className="text-xs"
-              >
-                Annuler
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={isCreating}
-                className="bg-primary hover:bg-blue-800 text-white text-xs gap-1.5"
-              >
-                {isCreating ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Création en cours…
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-3.5 w-3.5" />
-                    Créer la tâche
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CreateTaskModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        onSuccess={async (taskTitle) => {
+          await refetch();
+          await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          setFeedback({
+            type: "success",
+            message: `La tâche « ${taskTitle} » a été créée avec succès.`,
+          });
+        }}
+      />
 
       {/* ── MODAL 2: Edit Task Dialog ───────────────────────────── */}
       <Dialog

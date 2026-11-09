@@ -10,7 +10,8 @@
  * - Fully responsive (stacks vertically on mobile)
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
   UserCheck,
@@ -31,9 +32,15 @@ import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { QuickActionsPanel } from "@/components/dashboard/QuickActionsPanel";
 import { RecentAbsences } from "@/components/dashboard/RecentAbsences";
 import { Card, CardContent } from "@/components/ui/card";
+import { CreateUserModal } from "@/components/shared/CreateUserModal";
+import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
   // 1. Fetch real KPI metrics from GET /api/dashboard/admin
   const {
@@ -225,7 +232,10 @@ export default function AdminDashboardPage() {
         {/* ── Right Sidebar: 3 or 4 Columns on Desktop ────────── */}
         <div className="col-span-12 lg:col-span-4 xl:col-span-3 space-y-6">
           {/* Quick Actions Panel */}
-          <QuickActionsPanel />
+          <QuickActionsPanel
+            onAddEmployee={() => setIsUserModalOpen(true)}
+            onAssignTask={() => setIsTaskModalOpen(true)}
+          />
 
           {/* Absences Récentes (Real DB Data, No Fake Approve/Deny Buttons) */}
           <RecentAbsences
@@ -257,6 +267,27 @@ export default function AdminDashboardPage() {
           </Card>
         </div>
       </div>
+
+      {/* ── Quick Action Modals ─────────────────────────────── */}
+      <CreateUserModal
+        isOpen={isUserModalOpen}
+        onClose={() => setIsUserModalOpen(false)}
+        onSuccess={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+          await refetchKpis();
+        }}
+      />
+
+      <CreateTaskModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        onSuccess={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+          await queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
+          await refetchKpis();
+        }}
+      />
     </div>
   );
 }
