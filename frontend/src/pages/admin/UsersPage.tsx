@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   X,
   Eye,
+  Building,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -69,6 +70,7 @@ export default function UsersPage() {
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"ALL" | "ADMIN_RH" | "EMPLOYEE">("ALL");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
 
   // Notifications & Feedback
   const [feedback, setFeedback] = useState<{
@@ -130,6 +132,30 @@ export default function UsersPage() {
         q: searchQuery.trim() || undefined,
         role: roleFilter !== "ALL" ? roleFilter : undefined,
       }),
+  });
+
+  // Extract unique departments from users list
+  const departments = Array.from(
+    new Set(
+      users
+        .map(
+          (u) =>
+            u.employee_profile?.department ||
+            u.department ||
+            (u.role === "ADMIN_RH" ? "Administration" : null)
+        )
+        .filter((dept): dept is string => Boolean(dept && dept.trim()))
+    )
+  ).sort();
+
+  // Filter users by selected department
+  const filteredUsers = users.filter((u) => {
+    if (departmentFilter === "ALL") return true;
+    const userDept =
+      u.employee_profile?.department ||
+      u.department ||
+      (u.role === "ADMIN_RH" ? "Administration" : "");
+    return userDept === departmentFilter;
   });
 
   // ── Open Create Modal ───────────────────────────────────────────
@@ -453,6 +479,29 @@ export default function UsersPage() {
                 <Filter className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               </div>
             </div>
+
+            {/* Department Filter Dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap hidden sm:inline-block">
+                Département :
+              </span>
+              <div className="relative">
+                <select
+                  aria-label="Filtrer par département"
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                  className="appearance-none rounded-lg border border-slate-200 bg-slate-50/70 pl-3 pr-8 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer h-9"
+                >
+                  <option value="ALL">Tous les départements</option>
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+                <Building className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -500,7 +549,7 @@ export default function UsersPage() {
                   </TableCell>
                 </TableRow>
               ))
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-12">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-3">
@@ -510,17 +559,18 @@ export default function UsersPage() {
                     Aucun utilisateur trouvé
                   </p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    {searchQuery || roleFilter !== "ALL"
+                    {searchQuery || roleFilter !== "ALL" || departmentFilter !== "ALL"
                       ? "Aucun compte ne correspond à vos critères de recherche. Essayez d'ajuster ou de réinitialiser vos filtres."
                       : "Aucun utilisateur n'est actuellement enregistré dans la base."}
                   </p>
-                  {(searchQuery || roleFilter !== "ALL") && (
+                  {(searchQuery || roleFilter !== "ALL" || departmentFilter !== "ALL") && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => {
                         setSearchQuery("");
                         setRoleFilter("ALL");
+                        setDepartmentFilter("ALL");
                       }}
                       className="mt-4 text-xs font-semibold"
                     >
@@ -530,7 +580,7 @@ export default function UsersPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((targetUser) => {
+              filteredUsers.map((targetUser) => {
                 const initials =
                   `${targetUser.first_name?.[0] || ""}${targetUser.last_name?.[0] || ""}`.toUpperCase() ||
                   "U";

@@ -210,10 +210,12 @@ def declare_absence(
     absence_date: date,
     status: str,
     justification_note: str | None = None,
+    override: bool = False,
 ) -> Attendance:
     """Declare an absence for an employee on a specific date.
 
-    Raises 409 if an attendance record already exists for that employee/date.
+    Raises 409 if an attendance record already exists for that employee/date,
+    unless `override=True` is explicitly specified (e.g. authorized early departure/permission).
     """
     existing = (
         db.query(Attendance)
@@ -224,10 +226,16 @@ def declare_absence(
         .first()
     )
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Attendance record already exists for this employee/date",
-        )
+        if not override:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Attendance record already exists for this employee/date",
+            )
+        existing.status = status
+        existing.justification_note = justification_note
+        db.commit()
+        db.refresh(existing)
+        return existing
 
     attendance = Attendance(
         employee_id=employee_id,
@@ -238,6 +246,27 @@ def declare_absence(
         justification_note=justification_note,
     )
     db.add(attendance)
+    db.commit()
+    db.refresh(attendance)
+    return attendance
+
+
+def override_status(
+    db: Session,
+    attendance_id: int,
+    new_status: str,
+    justification_note: str | None = None,
+) -> Attendance:
+    """Override an attendance record's status (e.g. PRESENT -> ABSENT_JUSTIFIED for early leave)."""
+    attendance = db.get(Attendance, attendance_id)
+    if attendance is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attendance record not found",
+        )
+    attendance.status = new_status
+    if justification_note is not None:
+        attendance.justification_note = justification_note
     db.commit()
     db.refresh(attendance)
     return attendance

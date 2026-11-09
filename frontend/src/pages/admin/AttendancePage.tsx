@@ -11,6 +11,7 @@ import {
   Pencil,
   Loader2,
   X,
+  LogOut,
 } from "lucide-react";
 import {
   Table,
@@ -37,6 +38,7 @@ import {
   listAllAttendance,
   declareAbsence,
   justifyAbsence,
+  overrideAttendanceStatus,
 } from "@/api/attendances";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Attendance, BreakSummary } from "@/types";
@@ -73,6 +75,16 @@ export default function AttendancePage() {
   const [justifyNote, setJustifyNote] = useState("");
   const [isJustifying, setIsJustifying] = useState(false);
   const [justifyError, setJustifyError] = useState<string | null>(null);
+
+  // Modal: Manage Departure (Early Leave / Permission)
+  const [departureAttendance, setDepartureAttendance] =
+    useState<Attendance | null>(null);
+  const [departureStatus, setDepartureStatus] = useState<
+    "ABSENT_JUSTIFIED" | "ABSENT_UNJUSTIFIED"
+  >("ABSENT_JUSTIFIED");
+  const [departureNote, setDepartureNote] = useState("Permission exceptionnelle");
+  const [isSubmittingDeparture, setIsSubmittingDeparture] = useState(false);
+  const [departureError, setDepartureError] = useState<string | null>(null);
 
   // 1. Fetch Employees for dropdown
   const { data: users = [] } = useQuery({
@@ -246,6 +258,45 @@ export default function AttendancePage() {
       setJustifyError(typeof msg === "string" ? msg : JSON.stringify(msg));
     } finally {
       setIsJustifying(false);
+    }
+  }
+
+  // ── Open Departure Modal ────────────────────────────────────────
+  function handleOpenDeparture(attendance: Attendance) {
+    setDepartureAttendance(attendance);
+    setDepartureStatus("ABSENT_JUSTIFIED");
+    setDepartureNote("Permission exceptionnelle");
+    setDepartureError(null);
+  }
+
+  // ── Submit Departure Override ───────────────────────────────────
+  async function handleSubmitDeparture(e: React.FormEvent) {
+    e.preventDefault();
+    if (!departureAttendance) return;
+    setDepartureError(null);
+
+    setIsSubmittingDeparture(true);
+    try {
+      await overrideAttendanceStatus(departureAttendance.id, {
+        status: departureStatus,
+        justification_note: departureNote.trim() || undefined,
+      });
+
+      await refetch();
+      await queryClient.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      setDepartureAttendance(null);
+      setFeedback({
+        type: "success",
+        message:
+          "Le départ / permission a été validé et le statut de présence mis à jour.",
+      });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || "Erreur lors de la mise à jour.";
+      setDepartureError(typeof msg === "string" ? msg : JSON.stringify(msg));
+    } finally {
+      setIsSubmittingDeparture(false);
     }
   }
 
@@ -609,29 +660,44 @@ export default function AttendancePage() {
 
                     {/* Actions */}
                     <TableCell className="text-right">
-                      {isUnjustified ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenJustify(item)}
-                          className="h-7 px-2.5 text-xs text-primary border-blue-200 hover:bg-blue-50 font-semibold gap-1"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          <span>Justifier</span>
-                        </Button>
-                      ) : isJustified ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleOpenJustify(item)}
-                          className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
-                          title="Modifier la note de justification"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                      ) : (
-                        <span className="text-slate-300 text-xs">—</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {isPresent && !item.check_out && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenDeparture(item)}
+                            className="h-7 px-2 text-xs text-amber-700 bg-amber-50/70 border-amber-200 hover:bg-amber-100 font-semibold gap-1 whitespace-nowrap"
+                            title="Gérer le départ anticipé ou la permission d'absence"
+                          >
+                            <LogOut className="h-3 w-3" />
+                            <span>Gérer le départ</span>
+                          </Button>
+                        )}
+
+                        {isUnjustified ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenJustify(item)}
+                            className="h-7 px-2.5 text-xs text-primary border-blue-200 hover:bg-blue-50 font-semibold gap-1"
+                          >
+                            <Pencil className="h-3 w-3" />
+                            <span>Justifier</span>
+                          </Button>
+                        ) : isJustified ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleOpenJustify(item)}
+                            className="h-7 px-2 text-xs text-slate-500 hover:text-slate-800"
+                            title="Modifier la note de justification"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                        ) : !isPresent || item.check_out ? (
+                          <span className="text-slate-300 text-xs">—</span>
+                        ) : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -860,6 +926,128 @@ export default function AttendancePage() {
                   <>
                     <Check className="h-3.5 w-3.5" />
                     Valider la justification
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── MODAL 3: Manage Departure Dialog ─────────────────────── */}
+      <Dialog
+        open={Boolean(departureAttendance)}
+        onOpenChange={(open) => !open && setDepartureAttendance(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                <LogOut className="h-4 w-4" />
+              </div>
+              <DialogTitle>Gérer le départ anticipé</DialogTitle>
+            </div>
+            <DialogDescription>
+              Validez une sortie ou permission pour{" "}
+              {departureAttendance?.employee_name ||
+                `Employé #${departureAttendance?.employee_id}`}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitDeparture} className="space-y-4 py-2">
+            {departureError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                <span>{departureError}</span>
+              </div>
+            )}
+
+            {departureAttendance && (
+              <div className="rounded-xl bg-slate-50 p-3 border border-slate-100 text-xs space-y-1">
+                <p className="text-slate-500">
+                  Arrivée pointée :{" "}
+                  <span className="font-semibold text-slate-800">
+                    {departureAttendance.check_in
+                      ? formatDateTime(departureAttendance.check_in)
+                      : "—"}
+                  </span>
+                </p>
+                <p className="text-slate-500">
+                  Date :{" "}
+                  <span className="font-semibold text-slate-800">
+                    {formatDate(departureAttendance.date)}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {/* Target Status */}
+            <div className="space-y-1.5">
+              <Label htmlFor="dep-status" className="text-xs font-semibold text-slate-700">
+                Nouveau statut de la journée *
+              </Label>
+              <select
+                id="dep-status"
+                value={departureStatus}
+                onChange={(e) =>
+                  setDepartureStatus(
+                    e.target.value as "ABSENT_JUSTIFIED" | "ABSENT_UNJUSTIFIED"
+                  )
+                }
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              >
+                <option value="ABSENT_JUSTIFIED">
+                  Absence Justifiée (Permission exceptionnelle / Départ autorisé)
+                </option>
+                <option value="ABSENT_UNJUSTIFIED">
+                  Absence Non Justifiée (Sortie non autorisée)
+                </option>
+              </select>
+            </div>
+
+            {/* Justification note */}
+            <div className="space-y-1.5">
+              <Label htmlFor="dep-note" className="text-xs font-semibold text-slate-700">
+                Motif / Note de justification *
+              </Label>
+              <textarea
+                id="dep-note"
+                rows={3}
+                required
+                autoFocus
+                placeholder="Ex : Permission exceptionnelle pour motif familial accordée par RH..."
+                value={departureNote}
+                onChange={(e) => setDepartureNote(e.target.value)}
+                className="w-full rounded-md border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            <DialogFooter className="pt-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setDepartureAttendance(null)}
+                disabled={isSubmittingDeparture}
+                className="text-xs"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={isSubmittingDeparture}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs gap-1.5"
+              >
+                {isSubmittingDeparture ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Enregistrement…
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    Valider le départ
                   </>
                 )}
               </Button>

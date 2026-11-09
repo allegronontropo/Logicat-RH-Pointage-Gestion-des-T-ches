@@ -112,9 +112,17 @@ class AbsenceCreate(BaseModel):
     date: date
     status: str  # 'ABSENT_JUSTIFIED' | 'ABSENT_UNJUSTIFIED'
     justification_note: str | None = None
+    override: bool = False
 
 
 class AbsenceJustifyRequest(BaseModel):
     """Request body for PATCH /api/attendances/{id}/justify."""
 
     justification_note: str = Field(..., min_length=1, max_length=255)
+
+
+class AttendanceStatusOverrideRequest(BaseModel):
+    """Request body for PATCH /api/attendances/{id}/status (early departure / permission override)."""
+
+    status: str = Field(..., description="Target status, e.g. ABSENT_JUSTIFIED")
+    justification_note: str | None = None

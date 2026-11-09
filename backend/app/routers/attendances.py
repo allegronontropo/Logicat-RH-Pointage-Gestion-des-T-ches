@@ -27,7 +27,12 @@ from app.models.attendance import Attendance
 from app.models.employee import Employee
 from app.models.user import User
 from app.models.break_ import Break
-from app.schemas.attendance import AttendanceResponse, AbsenceCreate, AbsenceJustifyRequest
+from app.schemas.attendance import (
+    AttendanceResponse,
+    AbsenceCreate,
+    AbsenceJustifyRequest,
+    AttendanceStatusOverrideRequest,
+)
 from app.services import attendance_service
 
 router = APIRouter(prefix="/api/attendances", tags=["attendances"])
@@ -189,10 +194,41 @@ def declare_absence_endpoint(
         absence_date=absence_data.date,
         status=absence_data.status,
         justification_note=absence_data.justification_note,
+        override=absence_data.override,
     )
     attendance = (
         db.query(Attendance)
-        .options(joinedload(Attendance.breaks))
+        .options(
+            joinedload(Attendance.breaks),
+            joinedload(Attendance.employee).joinedload(Employee.user),
+        )
+        .filter(Attendance.id == attendance.id)
+        .first()
+    )
+    return AttendanceResponse.from_orm_with_durations(attendance)
+
+
+@router.patch(
+    "/{attendance_id}/status",
+    response_model=AttendanceResponse,
+    summary="Update attendance status (early departure / permission)",
+    description="Admin overrides status (e.g. to ABSENT_JUSTIFIED for early departure/permission) with a justification note.",
+)
+def override_attendance_status_endpoint(
+    attendance_id: int,
+    data: AttendanceStatusOverrideRequest,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+) -> AttendanceResponse:
+    attendance = attendance_service.override_status(
+        db, attendance_id, data.status, data.justification_note
+    )
+    attendance = (
+        db.query(Attendance)
+        .options(
+            joinedload(Attendance.breaks),
+            joinedload(Attendance.employee).joinedload(Employee.user),
+        )
         .filter(Attendance.id == attendance.id)
         .first()
     )

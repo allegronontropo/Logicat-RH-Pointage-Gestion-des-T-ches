@@ -44,8 +44,23 @@ export async function declareAbsence(payload: {
   date: string;
   status: "ABSENT_JUSTIFIED" | "ABSENT_UNJUSTIFIED";
   justification_note?: string;
+  override?: boolean;
 }): Promise<Attendance> {
   const { data } = await apiClient.post<Attendance>("/api/attendances/absences", payload);
+  return data;
+}
+
+export async function overrideAttendanceStatus(
+  attendanceId: number,
+  payload: {
+    status: string;
+    justification_note?: string;
+  }
+): Promise<Attendance> {
+  const { data } = await apiClient.patch<Attendance>(
+    `/api/attendances/${attendanceId}/status`,
+    payload
+  );
   return data;
 }
 
