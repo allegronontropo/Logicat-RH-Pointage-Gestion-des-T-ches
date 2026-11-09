@@ -7,11 +7,16 @@ SQLAlchemy 2.0 model for the `tasks` table.
 from __future__ import annotations
 
 from datetime import datetime, date, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, ForeignKey, Date, DateTime, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.employee import Employee
+    from app.models.user import User
 
 
 def _now_utc() -> datetime:
@@ -38,6 +43,10 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(
         default=_now_utc, onupdate=_now_utc, nullable=False
     )
+
+    # Relationships
+    employee: Mapped["Employee"] = relationship("Employee", back_populates="tasks")
+    creator: Mapped["User"] = relationship("User")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Task id={self.id} title={self.title!r} status={self.status!r}>"

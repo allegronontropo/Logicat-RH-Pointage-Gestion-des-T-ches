@@ -7,11 +7,16 @@ SQLAlchemy 2.0 model for the `attendances` table.
 from __future__ import annotations
 
 from datetime import datetime, date, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import String, ForeignKey, Date, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.models.break_ import Break
+    from app.models.employee import Employee
 
 
 def _now_utc() -> datetime:
@@ -31,6 +36,9 @@ class Attendance(Base):
     check_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="PRESENT")
     justification_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    breaks: Mapped[list["Break"]] = relationship(back_populates="attendance", cascade="all, delete-orphan")
+    employee: Mapped["Employee"] = relationship("Employee", back_populates="attendances")
 
     __table_args__ = (
         UniqueConstraint("employee_id", "date", name="uq_employee_date"),

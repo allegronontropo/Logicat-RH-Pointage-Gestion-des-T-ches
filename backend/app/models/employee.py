@@ -16,6 +16,8 @@ from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
+    from app.models.attendance import Attendance
+    from app.models.task import Task
 
 
 def _now_utc() -> datetime:
@@ -36,6 +38,8 @@ class Employee(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="employee")
+    attendances: Mapped[list["Attendance"]] = relationship(back_populates="employee")
+    tasks: Mapped[list["Task"]] = relationship(back_populates="employee")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Employee id={self.id} user_id={self.user_id} department={self.department!r}>"
