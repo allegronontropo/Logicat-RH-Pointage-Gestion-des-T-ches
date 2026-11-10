@@ -8,7 +8,6 @@ export interface KpiCardProps {
   icon: React.ElementType;
   iconBgColor?: string;
   iconTextColor?: string;
-  trendText?: string;
   subtitle?: string;
   to?: string;
   onClick?: () => void;
@@ -20,7 +19,6 @@ export function KpiCard({
   icon: Icon,
   iconBgColor = "bg-blue-50",
   iconTextColor = "text-blue-600",
-  trendText,
   subtitle,
   to,
   onClick,
@@ -46,14 +44,6 @@ export function KpiCard({
           >
             <Icon className="h-5 w-5 stroke-[2.2]" />
           </div>
-
-          {/* Subtle neutral indicator without fake percentage */}
-          {trendText && (
-            <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-slate-100/80 text-slate-500 border border-slate-200/60">
-              <Minus className="h-2.5 w-2.5 text-slate-400" />
-              <span className="font-mono">{trendText}</span>
-            </div>
-          )}
         </div>
 
         {/* Numbers & Labels */}
