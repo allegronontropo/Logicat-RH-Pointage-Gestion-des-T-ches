@@ -10,7 +10,7 @@ Employee (via get_current_employee):
   GET    /api/attendances/me
 
 Admin (via require_admin):
-  GET    /api/attendances                    List all attendance (filters: ?employee_id=, ?date_from=, ?date_to=)
+  GET    /api/attendances                    List all attendance (filters: ?employee_id=, ?date_from=, ?date_to=, ?department=)
   POST   /api/attendances/absences           Declare an absence
 """
 
@@ -160,6 +160,7 @@ def list_all_attendance(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(require_admin)],
     employee_id: int | None = Query(default=None, description="Filter by employee ID"),
+    department: str | None = Query(default=None, description="Filter by employee department"),
     date: date | None = Query(default=None, description="Filter by exact date (YYYY-MM-DD)"),
     date_from: date | None = Query(default=None, description="Start date (YYYY-MM-DD)"),
     date_to: date | None = Query(default=None, description="End date (YYYY-MM-DD)"),
@@ -171,6 +172,10 @@ def list_all_attendance(
 
     if employee_id:
         query = query.filter(Attendance.employee_id == employee_id)
+    if department:
+        query = query.join(
+            Employee, Attendance.employee_id == Employee.id
+        ).filter(Employee.department == department)
     if date:
         query = query.filter(Attendance.date == date)
     else:

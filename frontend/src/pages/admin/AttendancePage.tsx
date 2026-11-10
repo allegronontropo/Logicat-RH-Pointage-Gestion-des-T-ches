@@ -46,6 +46,7 @@ import {
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Attendance, BreakSummary } from "@/types";
 import { EmployeeCombobox, type EmployeeOption } from "@/components/shared/EmployeeCombobox";
+import { DepartmentCombobox } from "@/components/shared/DepartmentCombobox";
 
 export default function AttendancePage() {
   const queryClient = useQueryClient();
@@ -54,6 +55,7 @@ export default function AttendancePage() {
   // Filters State
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("ALL");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
@@ -119,6 +121,20 @@ export default function AttendancePage() {
     [employees]
   );
 
+  // Unique departments for the Department filter
+  const departments = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((emp) => {
+      const dept = (
+        emp.employee_profile?.department ||
+        emp.department ||
+        ""
+      ).trim();
+      if (dept) set.add(dept);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "fr"));
+  }, [employees]);
+
   // 2. Fetch Attendance Records with filters
   const {
     data: attendances = [],
@@ -131,12 +147,15 @@ export default function AttendancePage() {
       "admin-list",
       selectedDate,
       selectedEmployeeId,
+      selectedDepartment,
       statusFilter,
     ],
     queryFn: () =>
       listAllAttendance({
         employee_id:
           selectedEmployeeId !== "ALL" ? Number(selectedEmployeeId) : undefined,
+        department:
+          selectedDepartment !== "ALL" ? selectedDepartment : undefined,
         date: selectedDate ? selectedDate : undefined,
       }),
   });
@@ -496,10 +515,10 @@ export default function AttendancePage() {
         </div>
       )}
 
-      {/* ── Filters Card (Date, Employee, Status) ─────────────── */}
+      {/* ── Filters Card (Date, Employee, Department, Status) ── */}
       <Card className="border border-slate-200/90 bg-white shadow-sm">
         <CardContent className="p-4 sm:p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 items-end">
             {/* Filter 1: Date Picker */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -540,7 +559,20 @@ export default function AttendancePage() {
               />
             </div>
 
-            {/* Filter 3: Status Filter */}
+            {/* Filter 3: Department Combobox */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">
+                Département
+              </Label>
+              <DepartmentCombobox
+                value={selectedDepartment}
+                onChange={(dept) => setSelectedDepartment(dept || "ALL")}
+                departments={departments}
+                className="bg-slate-50/70 font-medium"
+              />
+            </div>
+
+            {/* Filter 4: Status Filter */}
             <div className="space-y-1.5">
               <Label htmlFor="status-filter" className="text-xs font-semibold text-slate-700">
                 Statut
@@ -566,6 +598,7 @@ export default function AttendancePage() {
                 onClick={() => {
                   setSelectedDate(todayStr);
                   setSelectedEmployeeId("ALL");
+                  setSelectedDepartment("ALL");
                   setStatusFilter("ALL");
                 }}
                 className="h-9 px-3 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200 w-full"
@@ -578,6 +611,7 @@ export default function AttendancePage() {
                 onClick={() => {
                   setSelectedDate("");
                   setSelectedEmployeeId("ALL");
+                  setSelectedDepartment("ALL");
                   setStatusFilter("ALL");
                 }}
                 className="h-9 px-3 text-xs font-semibold text-slate-500 hover:text-slate-800 w-full"
@@ -773,7 +807,7 @@ export default function AttendancePage() {
                     Aucun enregistrement de pointage
                   </p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    {selectedDate || selectedEmployeeId !== "ALL" || statusFilter !== "ALL"
+                    {selectedDate || selectedEmployeeId !== "ALL" || selectedDepartment !== "ALL" || statusFilter !== "ALL"
                       ? "Aucun pointage ne correspond aux filtres sélectionnés. Essayez de réinitialiser vos critères."
                       : "Aucun pointage n'a encore été enregistré aujourd'hui."}
                   </p>
@@ -783,6 +817,7 @@ export default function AttendancePage() {
                     onClick={() => {
                       setSelectedDate("");
                       setSelectedEmployeeId("ALL");
+                      setSelectedDepartment("ALL");
                       setStatusFilter("ALL");
                     }}
                     className="mt-4 text-xs font-semibold"
