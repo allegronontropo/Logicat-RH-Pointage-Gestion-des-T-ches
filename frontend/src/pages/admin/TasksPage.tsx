@@ -57,6 +57,7 @@ import { listUsers } from "@/api/users";
 import { formatDate } from "@/lib/utils";
 import type { Task } from "@/types";
 import { EmployeeCombobox, type EmployeeOption } from "@/components/shared/EmployeeCombobox";
+import { DepartmentCombobox } from "@/components/shared/DepartmentCombobox";
 import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
 export default function TasksPage() {
@@ -569,25 +570,18 @@ export default function TasksPage() {
 
             {/* Filter Department */}
             <div className="space-y-1.5">
-              <Label htmlFor="dept-filter" className="text-xs font-semibold text-slate-700">
+              <Label className="text-xs font-semibold text-slate-700">
                 Département
               </Label>
-              <select
-                id="dept-filter"
+              <DepartmentCombobox
                 value={departmentFilter}
-                onChange={(e) => {
-                  setDepartmentFilter(e.target.value);
+                onChange={(dept) => {
+                  setDepartmentFilter(dept || "ALL");
                   setAssigneeFilter("ALL");
                 }}
-                className="w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary h-9 font-medium"
-              >
-                <option value="ALL">Tous les départements</option>
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
+                departments={departments}
+                className="bg-slate-50/70 font-medium"
+              />
             </div>
 
             {/* Filter Priority */}
