@@ -24,6 +24,8 @@ import {
   Download,
   Plus,
   PieChart as PieChartIcon,
+  Trash2,
+  RotateCw,
 } from "lucide-react";
 import {
   PieChart,
@@ -46,6 +48,15 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableHeader,
   TableBody,
@@ -59,6 +70,7 @@ import {
   deactivateUser,
   activateUser,
   resetPassword,
+  deleteUser,
   listUsers,
   type UserUpdatePayload,
 } from "@/api/users";
@@ -103,6 +115,12 @@ export default function UserDetailPage() {
 
   // Action loading state
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+
+  // Delete user modal state
+  const [deletingUser, setDeletingUser] = useState<UserDetail | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [needsReassign, setNeedsReassign] = useState(false);
 
   // Export CSV State
   const [isExporting, setIsExporting] = useState(false);
@@ -452,6 +470,82 @@ export default function UserDetailPage() {
     }
   }
 
+  // ── Open Delete Confirmation ────────────────────────────────────
+  function handleOpenDelete() {
+    if (!user) return;
+    setDeleteError(null);
+    setNeedsReassign(false);
+    setDeletingUser(user);
+  }
+
+  // ── Redirect to the Tasks page filtered on the blocking employee ─
+  async function handleGoReassign() {
+    if (!deletingUser) return;
+
+    // Fetch the user detail to reliably get the employee profile id.
+    // Task.assigned_to references employees.id, not users.id, so we must
+    // pass the employee id to avoid landing on another user's tasks.
+    try {
+      const detail = await getUserById(deletingUser.id);
+      const employeeId =
+        detail.employee_profile?.id ??
+        detail.employee_id ??
+        deletingUser.id;
+
+      setDeletingUser(null);
+      setDeleteError(null);
+      setNeedsReassign(false);
+      navigate(`/admin/tasks?assigned_to=${employeeId}`);
+    } catch {
+      setDeletingUser(null);
+      setDeleteError(null);
+      setNeedsReassign(false);
+      navigate(`/admin/tasks?assigned_to=${deletingUser.id}`);
+    }
+  }
+
+  // ── Confirm Hard Delete ─────────────────────────────────────────
+  async function handleConfirmDelete() {
+    if (!deletingUser) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteUser(deletingUser.id);
+      await refetchUser();
+      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendances"] });
+      setFeedback({
+        type: "success",
+        message: `L'utilisateur ${deletingUser.first_name} ${deletingUser.last_name} a été supprimé définitivement.`,
+      });
+      setDeletingUser(null);
+      navigate("/admin/users");
+    } catch (err: unknown) {
+      const status = (
+        err as { response?: { status?: number; data?: { detail?: string } } }
+      )?.response?.status;
+      const detail = (
+        err as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail;
+
+      if (status === 409) {
+        // Blocked by assigned tasks: offer the reassignment shortcut.
+        setNeedsReassign(true);
+        setDeleteError(
+          "Impossible de supprimer : cet employé a des tâches assignées. Veuillez les réassigner d'abord."
+        );
+      } else {
+        setDeleteError(
+          typeof detail === "string" ? detail : "Erreur lors de la suppression."
+        );
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   // ── Submit Password Reset ───────────────────────────────────────
   async function handleSubmitResetPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -797,6 +891,20 @@ export default function UserDetailPage() {
                   )}
                 </Button>
               </div>
+
+              {/* Delete Button */}
+              {user && user.id !== currentUser?.id && (
+                <Button
+                  onClick={handleOpenDelete}
+                  disabled={isDeleting}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-xs font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  Supprimer
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -1657,6 +1765,82 @@ export default function UserDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── MODAL 4: Delete User Confirmation ─────────────────────── */}
+      <AlertDialog
+        open={Boolean(deletingUser)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            setDeletingUser(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                <Trash2 className="h-4 w-4" />
+              </div>
+              <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ?
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {deletingUser && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+              <p className="font-bold text-slate-900">
+                {deletingUser.first_name} {deletingUser.last_name}
+              </p>
+              <p className="text-slate-500 mt-0.5">{deletingUser.email}</p>
+            </div>
+          )}
+
+          {deleteError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <span>{deleteError}</span>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting || needsReassign}>
+              Annuler
+            </AlertDialogCancel>
+            {needsReassign ? (
+              <Button
+                onClick={handleGoReassign}
+                disabled={isDeleting}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5"
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+                Réassigner les tâches
+              </Button>
+            ) : (
+              <Button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Suppression…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Supprimer définitivement
+                  </>
+                )}
+              </Button>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
