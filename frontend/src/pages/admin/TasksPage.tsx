@@ -69,6 +69,7 @@ export default function TasksPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("ALL");
+  const [isLateFilter, setIsLateFilter] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
 
@@ -137,6 +138,7 @@ export default function TasksPage() {
       priorityFilter,
       statusFilter,
       assigneeFilter,
+      isLateFilter,
     ],
     queryFn: () =>
       listTasks({
@@ -144,6 +146,8 @@ export default function TasksPage() {
         status: statusFilter !== "ALL" ? statusFilter : undefined,
         assigned_to:
           assigneeFilter !== "ALL" ? Number(assigneeFilter) : undefined,
+        is_late:
+          isLateFilter !== "ALL" ? isLateFilter === "true" : undefined,
       }),
   });
 
@@ -237,7 +241,7 @@ export default function TasksPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, priorityFilter, statusFilter, departmentFilter, assigneeFilter]);
+  }, [searchQuery, priorityFilter, statusFilter, departmentFilter, assigneeFilter, isLateFilter]);
 
   const totalPages = Math.max(1, Math.ceil(sortedTasks.length / PAGE_SIZE));
   const paginatedTasks = sortedTasks.slice(
@@ -542,7 +546,7 @@ export default function TasksPage() {
       {/* ── Filters Card (Search, Department, Priority, Status, Assignee) ── */}
       <Card className="border border-slate-200/90 bg-white shadow-sm">
         <CardContent className="p-4 sm:p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 items-end">
             {/* Search Input */}
             <div className="space-y-1.5">
               <Label htmlFor="task-search" className="text-xs font-semibold text-slate-700">
@@ -620,19 +624,37 @@ export default function TasksPage() {
               </select>
             </div>
 
+            {/* Filter Échéance (Late / On time) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="late-filter" className="text-xs font-semibold text-slate-700">
+                Échéance
+              </Label>
+              <select
+                id="late-filter"
+                value={isLateFilter}
+                onChange={(e) => setIsLateFilter(e.target.value)}
+                className="w-full rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs text-slate-800 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary h-9 font-medium"
+              >
+                <option value="ALL">Toutes les échéances</option>
+                <option value="false">À l'heure</option>
+                <option value="true">En retard</option>
+              </select>
+            </div>
+
             {/* Filter Assignee */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="assignee-filter" className="text-xs font-semibold text-slate-700">
                   Assigné à
                 </Label>
-                {(priorityFilter !== "ALL" || statusFilter !== "ALL" || assigneeFilter !== "ALL" || departmentFilter !== "ALL" || searchQuery) && (
+                {(priorityFilter !== "ALL" || statusFilter !== "ALL" || assigneeFilter !== "ALL" || departmentFilter !== "ALL" || isLateFilter !== "ALL" || searchQuery) && (
                   <button
                     onClick={() => {
                       setPriorityFilter("ALL");
                       setStatusFilter("ALL");
                       setAssigneeFilter("ALL");
                       setDepartmentFilter("ALL");
+                      setIsLateFilter("ALL");
                       setSearchQuery("");
                     }}
                     className="text-[10px] font-semibold text-primary hover:underline"
@@ -710,7 +732,8 @@ export default function TasksPage() {
                     priorityFilter !== "ALL" ||
                     statusFilter !== "ALL" ||
                     assigneeFilter !== "ALL" ||
-                    departmentFilter !== "ALL"
+                    departmentFilter !== "ALL" ||
+                    isLateFilter !== "ALL"
                       ? "Aucune tâche ne correspond à vos filtres. Essayez d'ajuster ou de réinitialiser vos critères."
                       : "Aucune tâche n'a été créée pour le moment."}
                   </p>
@@ -739,7 +762,8 @@ export default function TasksPage() {
                     priorityFilter !== "ALL" ||
                     statusFilter !== "ALL" ||
                     assigneeFilter !== "ALL" ||
-                    departmentFilter !== "ALL"
+                    departmentFilter !== "ALL" ||
+                    isLateFilter !== "ALL"
                       ? "Aucune tâche ne correspond à vos filtres. Essayez d'ajuster ou de réinitialiser vos critères."
                       : "Aucune tâche n'a été créée pour le moment."}
                   </p>
@@ -873,7 +897,7 @@ export default function TasksPage() {
                           </span>
                           {isPastDue && (
                             <span
-                              className="rounded bg-rose-100 text-rose-800 text-[9px] px-1 font-bold"
+                              className="rounded border border-rose-200 bg-rose-50 text-rose-700 text-[9px] px-1 font-bold"
                               title="Date d'échéance dépassée"
                             >
                               En retard

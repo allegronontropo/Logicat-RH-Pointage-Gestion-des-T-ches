@@ -5,7 +5,7 @@ Task endpoints — mixed roles.
 
 Admin:
   POST   /api/tasks                         Create + assign a task
-  GET    /api/tasks                         List all tasks (filters: ?assigned_to=, ?priority=, ?status=)
+  GET    /api/tasks                         List all tasks (filters: ?assigned_to=, ?priority=, ?status=, ?is_late=)
   PUT    /api/tasks/{id}                    Full update
   DELETE /api/tasks/{id}                    Delete
 
@@ -21,6 +21,7 @@ from typing import Annotated
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_current_employee, get_current_user, require_admin, get_db
@@ -97,6 +98,13 @@ def list_tasks_admin(
     assigned_to: int | None = Query(default=None, description="Filter by employee ID"),
     priority: str | None = Query(default=None, description="Filter by priority"),
     status: str | None = Query(default=None, description="Filter by status"),
+    is_late: bool | None = Query(
+        default=None,
+        description=(
+            "Filter late tasks: due_date < today AND status != DONE. "
+            "True = only late tasks, False = only non-late tasks."
+        ),
+    ),
 ) -> list[TaskResponse]:
     query = db.query(Task).options(
         joinedload(Task.employee).joinedload(Employee.user)
@@ -108,6 +116,20 @@ def list_tasks_admin(
         query = query.filter(Task.priority == priority)
     if status:
         query = query.filter(Task.status == status)
+    if is_late is True:
+        query = query.filter(
+            Task.due_date < func.current_date(),
+            Task.status != "DONE",
+        )
+    elif is_late is False:
+        # NOT late = no due date, due today/future, or already done.
+        query = query.filter(
+            or_(
+                Task.due_date.is_(None),
+                Task.due_date >= func.current_date(),
+                Task.status == "DONE",
+            )
+        )
 
     tasks = query.order_by(Task.id.desc()).all()
     return [TaskResponse.from_orm_with_assignee(t) for t in tasks]

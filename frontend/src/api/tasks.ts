@@ -27,6 +27,7 @@ export async function listTasks(params?: {
   assigned_to?: number;
   priority?: string;
   status?: string;
+  is_late?: boolean;
 }): Promise<Task[]> {
   const { data } = await apiClient.get<Task[]>("/api/tasks", { params });
   return data;
