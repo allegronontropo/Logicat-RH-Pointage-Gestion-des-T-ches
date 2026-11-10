@@ -66,6 +66,7 @@ import {
   activateUser,
   resetPassword,
   deleteUser,
+  getUserById,
   type UserUpdatePayload,
 } from "@/api/users";
 import type { UserDetail } from "@/types";
@@ -279,19 +280,29 @@ export default function UsersPage() {
   }
 
   // ── Redirect to the Tasks page filtered on the blocking employee ─
-  function handleGoReassign() {
+  async function handleGoReassign() {
     if (!deletingUser) return;
 
-    // Prefer the employee profile id; fall back to the user id.
-    const employeeId =
-      deletingUser.employee_profile?.id ??
-      deletingUser.employee_id ??
-      deletingUser.id;
+    // Fetch the user detail to reliably get the employee profile id.
+    // Task.assigned_to references employees.id, not users.id, so we must
+    // pass the employee id to avoid landing on another user's tasks.
+    try {
+      const detail = await getUserById(deletingUser.id);
+      const employeeId =
+        detail.employee_profile?.id ??
+        detail.employee_id ??
+        deletingUser.id;
 
-    setDeletingUser(null);
-    setDeleteError(null);
-    setNeedsReassign(false);
-    navigate(`/admin/tasks?assigned_to=${employeeId}`);
+      setDeletingUser(null);
+      setDeleteError(null);
+      setNeedsReassign(false);
+      navigate(`/admin/tasks?assigned_to=${employeeId}`);
+    } catch {
+      setDeletingUser(null);
+      setDeleteError(null);
+      setNeedsReassign(false);
+      navigate(`/admin/tasks?assigned_to=${deletingUser.id}`);
+    }
   }
 
   // ── Confirm Hard Delete ─────────────────────────────────────────

@@ -160,7 +160,7 @@ def delete_user(
       - 404 if the user does not exist.
       - 403 if the target is the current user (no self-deletion).
       - 409 if the target is the last active ADMIN_RH.
-      - 409 if the target employee still has tasks assigned to them.
+      - 409 if the target employee still has unfinished tasks assigned to them.
 
     Breaks, attendances and the employee profile are removed explicitly so
     the cleanup also works on engines that do not enforce ON DELETE CASCADE
@@ -193,8 +193,12 @@ def delete_user(
 
     employee = target.employee
     if employee is not None:
+        # Only block if there are unfinished tasks. Finished (DONE) tasks can
+        # be cascade-deleted along with the employee profile.
         assigned_tasks = (
-            db.query(Task).filter(Task.assigned_to == employee.id).count()
+            db.query(Task)
+            .filter(Task.assigned_to == employee.id, Task.status != "DONE")
+            .count()
         )
         if assigned_tasks > 0:
             raise HTTPException(
@@ -204,6 +208,13 @@ def delete_user(
                     "Veuillez les réassigner avant de le supprimer."
                 ),
             )
+
+        # Delete all tasks assigned to this employee (DB cascade alone is not
+        # enough: SQLAlchemy ORM tries to NULL assigned_to before the employee
+        # row is removed, which violates the NOT NULL constraint).
+        db.query(Task).filter(Task.assigned_to == employee.id).delete(
+            synchronize_session=False
+        )
 
         attendance_ids = [
             row[0]

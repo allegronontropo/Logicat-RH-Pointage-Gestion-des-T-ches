@@ -118,19 +118,18 @@ export default function TasksPage() {
 
   // Deep link: /admin/tasks?assigned_to=<employeeId> preselects the employee
   // filter. Used by the user-deletion flow to reassign blocking tasks.
+  // assigned_to is always an employee id (employees.id), never a user id.
   useEffect(() => {
     const assignedTo = searchParams.get("assigned_to");
     if (!assignedTo) return;
 
-    // Accept either the employee profile ID (preferred) or the user ID.
     const match = users.find(
       (u) =>
         u.role === "EMPLOYEE" &&
-        (String(u.employee_profile?.id ?? u.employee_id ?? "") === assignedTo ||
-          String(u.id) === assignedTo)
+        String(u.employee_profile?.id ?? u.employee_id ?? "") === assignedTo
     );
     const resolvedId = match
-      ? String(match.employee_profile?.id ?? match.employee_id ?? match.id)
+      ? String(match.employee_profile?.id ?? match.employee_id)
       : assignedTo;
 
     setAssigneeFilter(resolvedId);
