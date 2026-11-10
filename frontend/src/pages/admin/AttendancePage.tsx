@@ -1108,13 +1108,31 @@ export default function AttendancePage() {
                     {/* Pauses (Matin / Déj / Soir) */}
                     <TableCell className="py-2">
                       {item.breaks && item.breaks.length > 0 ? (
-                        <Link
-                          to={`/admin/users/${item.employee_id}`}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-blue-100 hover:text-blue-700 transition-colors cursor-pointer"
-                        >
-                          {item.breaks.length} pause{item.breaks.length > 1 ? "s" : ""}
-                          <ArrowRight className="h-3 w-3 text-slate-500" />
-                        </Link>
+                        <>
+                          {/*
+                            Map employee_id to the correct user_id for the profile link.
+                            The route /admin/users/:id expects a user ID, not an employee ID.
+                          */}
+                          {(() => {
+                            const targetUser = users.find(
+                              (u) =>
+                                (u.employee_id || u.employee_profile?.id) ===
+                                item.employee_id
+                            );
+                            const correctUserId = targetUser
+                              ? targetUser.id
+                              : item.employee_id;
+                            return (
+                              <Link
+                                to={`/admin/users/${correctUserId}`}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-blue-100 hover:text-blue-700 transition-colors cursor-pointer"
+                              >
+                                {item.breaks.length} pause{item.breaks.length > 1 ? "s" : ""}
+                                <ArrowRight className="h-3 w-3 text-slate-500" />
+                              </Link>
+                            );
+                          })()}
+                        </>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
