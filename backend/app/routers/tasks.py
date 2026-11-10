@@ -21,7 +21,7 @@ from typing import Annotated
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_current_employee, get_current_user, require_admin, get_db
@@ -157,7 +157,7 @@ def update_task_endpoint(
     # 1. Print to terminal to see exactly what Pydantic parsed
     print("PARSED PAYLOAD:", task_data.model_dump())
 
-    # 2. Apply updates manually field by field
+    # 2. Apply updates manually field by field (excluding status which we force via raw SQL)
     if task_data.title is not None:
         task.title = task_data.title
     if task_data.description is not None:
@@ -169,9 +169,13 @@ def update_task_endpoint(
     if task_data.assigned_to is not None:
         task.assigned_to = task_data.assigned_to
 
-    # 3. FORCE STATUS UPDATE
+    # 3. FORCE STATUS UPDATE via raw SQL to bypass any ORM session issues
     if task_data.status is not None:
-        task.status = task_data.status
+        db.execute(
+            text("UPDATE tasks SET status = :status WHERE id = :id"),
+            {"status": task_data.status, "id": task_id},
+        )
+        print(f"RAW SQL UPDATE: SET status = '{task_data.status}' WHERE id = {task_id}")
 
     db.commit()
     db.refresh(task)
