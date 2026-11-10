@@ -80,6 +80,32 @@ export default function AdminDashboardPage() {
     year: "numeric",
   }).format(new Date());
 
+  // Mock upcoming deadlines (to be wired to real API later)
+  const upcomingTasks = [
+    {
+      id: 1,
+      title: "Réviser les grilles salariales",
+      due_date: new Date().toISOString().split("T")[0],
+      assignee: { first_name: "Sara", last_name: "Bennani" },
+    },
+    {
+      id: 2,
+      title: "Clôture des congés mensuels",
+      due_date: new Date(
+        Date.now() + 24 * 60 * 60 * 1000
+      ).toISOString().split("T")[0],
+      assignee: { first_name: "Youssef", last_name: "Amrani" },
+    },
+    {
+      id: 3,
+      title: "Audit des pointages Q4",
+      due_date: new Date(
+        Date.now() + 5 * 24 * 60 * 60 * 1000
+      ).toISOString().split("T")[0],
+      assignee: { first_name: "Kamal", last_name: "Benzarti" },
+    },
+  ];
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* ── Top Page Banner / Controls ────────────────────────── */}
@@ -225,7 +251,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* ── Right Sidebar: 3 or 4 Columns on Desktop ────────── */}
-        <div className="col-span-12 lg:col-span-4 xl:col-span-3 space-y-6">
+        <div className="col-span-12 lg:col-span-4 xl:col-span-3 flex flex-col gap-6">
           {/* Quick Actions Panel */}
           <QuickActionsPanel
             onAddEmployee={() => setIsUserModalOpen(true)}
@@ -238,26 +264,64 @@ export default function AdminDashboardPage() {
             isLoading={isAttendancesLoading}
           />
 
-          {/* System & Compliance Mini Card */}
-          <Card className="border border-slate-200/90 bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-sm overflow-hidden">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                  Statut Plateforme
-                </span>
-                <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-400">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  En ligne
-                </span>
-              </div>
-              <p className="text-xs text-slate-300">
-                Synchronisation PostgreSQL active. Heure serveur UTC alignée sur
-                le fuseau Casablanca.
-              </p>
-              <div className="pt-1 text-[10px] text-slate-400 flex items-center justify-between border-t border-slate-700/60">
-                <span>FastAPI 0.3.0</span>
-                <span>Données Réelles</span>
-              </div>
+          {/* Échéances à venir (Upcoming Deadlines) */}
+          <Card className="border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+            <CardHeader className="px-4 py-3 flex items-center gap-2 border-b border-slate-100">
+              <Clock className="h-4 w-4 text-slate-500" />
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Échéances à venir
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 space-y-2">
+              {upcomingTasks.length === 0 ? (
+                <div className="text-center py-3">
+                  <p className="text-xs text-slate-400">Aucune échéance à venir.</p>
+                </div>
+              ) : (
+                upcomingTasks.map((task) => {
+                  const dueDate = new Date(task.due_date!);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const tomorrow = new Date(today);
+                  tomorrow.setDate(tomorrow.getDate() + 1);
+                  const isUrgent = dueDate <= tomorrow;
+
+                  const assigneeName =
+                    task.assignee
+                      ? `${task.assignee.first_name} ${task.assignee.last_name}`
+                      : "Non assigné";
+
+                  return (
+                    <div
+                      key={task.id}
+                      className="border-b border-slate-50 pb-1.5 last:border-0"
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-slate-900 truncate">
+                            {task.title}
+                          </p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {assigneeName}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold ${
+                            isUrgent
+                              ? "text-rose-600"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {dueDate.toLocaleDateString("fr-FR", {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </CardContent>
           </Card>
         </div>
