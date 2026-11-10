@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Clock,
   CalendarX,
@@ -15,6 +16,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from "lucide-react";
 import {
   Table,
@@ -36,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { listUsers } from "@/api/users";
 import {
   listAllAttendance,
@@ -44,9 +48,26 @@ import {
   overrideAttendanceStatus,
 } from "@/api/attendances";
 import { formatDate, formatDateTime } from "@/lib/utils";
-import type { Attendance, BreakSummary } from "@/types";
-import { EmployeeCombobox, type EmployeeOption } from "@/components/shared/EmployeeCombobox";
+import type { Attendance } from "@/types";
+import { EmployeeCombobox } from "@/components/shared/EmployeeCombobox";
 import { DepartmentCombobox } from "@/components/shared/DepartmentCombobox";
+
+type EmployeeOption = {
+  id: string | number;
+  firstName: string;
+  lastName: string;
+  employee_profile?: { id: string | number };
+  employee_id?: string | number;
+};
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 export default function AttendancePage() {
   const queryClient = useQueryClient();
@@ -101,6 +122,80 @@ export default function AttendancePage() {
   const [isSubmittingDeparture, setIsSubmittingDeparture] = useState(false);
   const [departureError, setDepartureError] = useState<string | null>(null);
 
+  // Modal: Global Monthly Report
+  const [isGlobalReportOpen, setIsGlobalReportOpen] = useState(false);
+  const [reportMonth, setReportMonth] = useState<string>(
+    new Date().toISOString().split("T")[0].substring(0, 7)
+  ); // YYYY-MM
+  const [reportDepartment, setReportDepartment] = useState<string>("ALL");
+  const [globalReportData, setGlobalReportData] = useState<{
+    totalEffective: number;
+    totalLunch: number;
+    totalMorningAfternoon: number;
+    attendanceCount: number;
+  } | null>(null);
+  const [globalReportExporting, setGlobalReportExporting] = useState(false);
+
+  // Handle URL parameter to auto-open the global report modal
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const openReport = searchParams.get("open_report");
+    if (openReport === "true") {
+      setIsGlobalReportOpen(true);
+      // Remove the param from URL so a page refresh doesn't reopen it
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("open_report");
+      setSearchParams(newParams.toString(), { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Helper to format minutes as "450h 30m"
+  function formatTotalMinutes(mins: number): string {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+  }
+
+  // ── PDF Export Rate Limiting (localStorage) ──────────────────────
+  const STORAGE_KEY = "pdf_export_limit";
+  const MAX_EXPORTS_PER_DAY = 3;
+
+  function getTodayStr(): string {
+    return new Date().toISOString().split("T")[0];
+  }
+
+  function getExportData(): { date: string; count: number } {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const data = JSON.parse(stored);
+        if (data.date === getTodayStr()) {
+          return data;
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+    return { date: getTodayStr(), count: 0 };
+  }
+
+  function checkExportLimit(): boolean {
+    const data = getExportData();
+    return data.count < MAX_EXPORTS_PER_DAY;
+  }
+
+  function recordExport(): void {
+    const data = getExportData();
+    data.count += 1;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+
+  function getRemainingExports(): number {
+    const data = getExportData();
+    return Math.max(0, MAX_EXPORTS_PER_DAY - data.count);
+  }
+
   // 1. Fetch Employees for dropdown
   const { data: users = [] } = useQuery({
     queryKey: ["admin-attendance-employees"],
@@ -134,6 +229,22 @@ export default function AttendancePage() {
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, "fr"));
   }, [employees]);
+
+  // 3. Fetch Global Report Data (for selected month & department)
+  const { data: globalAttendances = [], isLoading: isGlobalReportLoading, refetch: refetchGlobalReport } = useQuery({
+    queryKey: ["attendances", "global-report", reportMonth, reportDepartment],
+    queryFn: () => {
+      const [year, month] = reportMonth.split("-").map(Number);
+      const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+      const endDate = `${year}-${String(month).padStart(2, "0")}-${new Date(year, month, 0).getDate()}`;
+      return listAllAttendance({
+        department: reportDepartment !== "ALL" ? reportDepartment : undefined,
+        date_from: startDate,
+        date_to: endDate,
+      });
+    },
+    enabled: Boolean(reportMonth),
+  });
 
   // 2. Fetch Attendance Records with filters
   const {
@@ -261,38 +372,6 @@ export default function AttendancePage() {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${hours}h ${mins.toString().padStart(2, "0")}m`;
-  }
-
-  // Helper: Format Breaks with exact times, e.g. "Matin: 10:30 - 10:45"
-  function renderBreaks(breaks: BreakSummary[]) {
-    if (!breaks || breaks.length === 0) {
-      return <span className="text-slate-400 font-mono text-xs">—</span>;
-    }
-
-    const items = breaks.map((b) => {
-      const typeLabel =
-        b.type === "MORNING"
-          ? "Matin"
-          : b.type === "LUNCH"
-          ? "Déj"
-          : b.type === "EVENING"
-          ? "Soir"
-          : b.type;
-
-      if (!b.end_time) {
-        return `${typeLabel}: ${formatDateTime(b.start_time)} - en cours`;
-      }
-
-      return `${typeLabel}: ${formatDateTime(b.start_time)} - ${formatDateTime(
-        b.end_time
-      )}`;
-    });
-
-    return (
-      <span className="font-mono text-xs text-slate-700 whitespace-nowrap">
-        {items.join(" | ")}
-      </span>
-    );
   }
 
   // ── Open Declare Absence Modal ──────────────────────────────────
@@ -440,6 +519,112 @@ export default function AttendancePage() {
     }
   }
 
+  // ── Global Report Handlers ────────────────────────────────────────
+  function handleGenerateGlobalReport() {
+    refetchGlobalReport();
+  }
+
+  // Effect to process global report data when it loads
+  useEffect(() => {
+    if (globalAttendances.length > 0) {
+      let totalEffective = 0;
+      let totalLunch = 0;
+      let totalMorningAfternoon = 0;
+
+      globalAttendances.forEach((att) => {
+        totalEffective += att.effective_minutes || 0;
+        (att.breaks || []).forEach((b) => {
+          if (b.start_time && b.end_time) {
+            const start = new Date(b.start_time).getTime();
+            const end = new Date(b.end_time).getTime();
+            const mins = Math.max(0, Math.round((end - start) / 60000));
+            if (b.type === "LUNCH") {
+              totalLunch += mins;
+            } else {
+              totalMorningAfternoon += mins;
+            }
+          }
+        });
+      });
+
+      setGlobalReportData({
+        totalEffective,
+        totalLunch,
+        totalMorningAfternoon,
+        attendanceCount: globalAttendances.length,
+      });
+    } else if (!isGlobalReportLoading) {
+      setGlobalReportData({
+        totalEffective: 0,
+        totalLunch: 0,
+        totalMorningAfternoon: 0,
+        attendanceCount: 0,
+      });
+    }
+  }, [globalAttendances, isGlobalReportLoading]);
+
+  async function handleExportGlobalReportPDF() {
+    if (!globalReportData) return;
+
+    // Check rate limit
+    if (!checkExportLimit()) {
+      setFeedback({
+        type: "error",
+        message: "Limite d'exports PDF atteinte (3/jour). Veuillez réessayer demain.",
+      });
+      return;
+    }
+
+    const container = document.getElementById("global-report-pdf-container");
+    if (!container) return;
+
+    setGlobalReportExporting(true);
+    try {
+      container.classList.remove("hidden");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+
+      container.classList.add("hidden");
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = pdfWidth - 20;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+
+      const deptLabel = reportDepartment === "ALL" ? "Tous_Departements" : reportDepartment;
+      pdf.save(`rapport_mensuel_${deptLabel}_${reportMonth}.pdf`);
+
+      // Record the export after successful generation
+      recordExport();
+
+      setFeedback({
+        type: "success",
+        message: "Rapport PDF généré avec succès.",
+      });
+    } catch (err: unknown) {
+      container.classList.add("hidden");
+      setFeedback({
+        type: "error",
+        message: "Erreur lors de la génération du PDF.",
+      });
+    } finally {
+      setGlobalReportExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-12">
       {/* ── Top Page Header ───────────────────────────────────── */}
@@ -487,6 +672,15 @@ export default function AttendancePage() {
           >
             <CalendarX className="h-4 w-4" />
             <span>Déclarer une Absence</span>
+          </Button>
+
+          <Button
+            onClick={() => setIsGlobalReportOpen(true)}
+            size="sm"
+            className="h-9 px-4 text-xs font-semibold bg-primary hover:bg-blue-800 text-white shadow-sm gap-1.5"
+          >
+            <BarChart3 className="h-4 w-4" />
+            <span>Rapport Global</span>
           </Button>
         </div>
       </div>
@@ -554,7 +748,7 @@ export default function AttendancePage() {
               </Label>
               <EmployeeCombobox
                 value={selectedEmployeeId}
-                onChange={(val) => setSelectedEmployeeId(val ? String(val) : "ALL")}
+                onChange={(val: string | number) => setSelectedEmployeeId(val ? String(val) : "ALL")}
                 employees={employeeOptions}
                 showAllOption={true}
                 className="bg-slate-50/70 font-medium"
@@ -568,7 +762,7 @@ export default function AttendancePage() {
               </Label>
               <DepartmentCombobox
                 value={selectedDepartment}
-                onChange={(dept) => setSelectedDepartment(dept || "ALL")}
+                onChange={(dept: string) => setSelectedDepartment(dept || "ALL")}
                 departments={departments}
                 className="bg-slate-50/70 font-medium"
               />
@@ -861,7 +1055,7 @@ export default function AttendancePage() {
                     className="hover:bg-slate-50/70 transition-colors"
                   >
                     {/* Employé */}
-                    <TableCell>
+                    <TableCell className="py-2">
                       <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-sm">
                           {initials}
@@ -878,45 +1072,75 @@ export default function AttendancePage() {
                     </TableCell>
 
                     {/* Date */}
-                    <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap">
+                    <TableCell className="text-xs font-medium text-slate-700 whitespace-nowrap py-2">
                       {formatDate(item.date)}
                     </TableCell>
 
                     {/* Arrivée / Départ */}
-                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap">
+                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap py-2">
                       {item.check_in || item.check_out ? (
-                        <span>
-                          {formatTimeAMPM(item.check_in)}{" "}
-                          <span className="text-slate-400 font-sans mx-1">/</span>{" "}
-                          {formatTimeAMPM(item.check_out)}
-                        </span>
+                        <div className="flex flex-col gap-0.5 leading-tight">
+                          <span className="text-slate-600">
+                            Arrivée: <span className="font-medium text-slate-900">{formatTimeAMPM(item.check_in)}</span>
+                          </span>
+                          <span className="text-slate-600">
+                            Départ: <span className="font-medium text-slate-900">{item.check_out ? formatTimeAMPM(item.check_out) : "—"}</span>
+                          </span>
+                        </div>
                       ) : (
-                        "—"
+                        <span className="text-slate-400">—</span>
                       )}
                     </TableCell>
 
                     {/* Pauses (Matin / Déj / Soir) */}
-                    <TableCell>{renderBreaks(item.breaks)}</TableCell>
+                    <TableCell className="py-2">
+                      {item.breaks && item.breaks.length > 0 ? (
+                        <HoverCard>
+                          <HoverCardTrigger asChild>
+                            <span className="cursor-pointer inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors">
+                              {item.breaks.length} pause{item.breaks.length > 1 ? "s" : ""}
+                            </span>
+                          </HoverCardTrigger>
+                          <HoverCardContent className="w-64 p-3">
+                            <h4 className="text-xs font-bold text-slate-800 mb-2">Détail des pauses</h4>
+                            <div className="space-y-2">
+                              {item.breaks.map((b, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-xs">
+                                  <span className="font-medium text-slate-600">
+                                    {b.type === "MORNING" ? "Matin" : b.type === "LUNCH" ? "Déjeuner" : "Soir"}
+                                  </span>
+                                  <span className="font-mono text-slate-500">
+                                    {formatTimeAMPM(b.start_time)} - {b.end_time ? formatTimeAMPM(b.end_time) : "En cours"}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </HoverCardContent>
+                        </HoverCard>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </TableCell>
 
                     {/* Présence */}
-                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap">
+                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap py-2 text-right">
                       {formatDurationHM(item.presence_minutes, hasCheckIn)}
                     </TableCell>
 
                     {/* Pause Totale */}
-                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap">
+                    <TableCell className="font-mono text-xs text-slate-700 whitespace-nowrap py-2 text-right">
                       {formatDurationHM(item.break_minutes, hasCheckIn)}
                     </TableCell>
 
                     {/* Travail Effectif */}
-                    <TableCell className="whitespace-nowrap">
+                    <TableCell className="whitespace-nowrap py-2 text-right">
                       <span className="font-mono font-bold text-slate-900 text-xs bg-slate-100/90 border border-slate-200/80 px-2 py-0.5 rounded">
                         {formatDurationHM(item.effective_minutes, hasCheckIn)}
                       </span>
                     </TableCell>
 
                     {/* Statut */}
-                    <TableCell>
+                    <TableCell className="py-2">
                       {isPresent ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase text-emerald-700 border border-emerald-200/80">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -941,7 +1165,7 @@ export default function AttendancePage() {
                     </TableCell>
 
                     {/* Actions */}
-                    <TableCell className="text-right">
+                    <TableCell className="text-right py-2">
                       <div className="flex items-center justify-end gap-1.5">
                         {isPresent && !item.check_out && (
                           <Button
@@ -1063,7 +1287,7 @@ export default function AttendancePage() {
               </Label>
               <EmployeeCombobox
                 value={absenceEmployeeId ? Number(absenceEmployeeId) : 0}
-                onChange={(id) => setAbsenceEmployeeId(String(id))}
+                onChange={(id: string | number) => setAbsenceEmployeeId(String(id))}
                 employees={employeeOptions}
               />
             </div>
@@ -1388,6 +1612,389 @@ export default function AttendancePage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── MODAL 4: Global Monthly Report ─────────────────────────── */}
+      <Dialog open={isGlobalReportOpen} onOpenChange={setIsGlobalReportOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary bg-opacity-10 text-primary">
+                <BarChart3 className="h-4 w-4" />
+              </div>
+              <DialogTitle>Rapport Mensuel Global</DialogTitle>
+            </div>
+            <DialogDescription>
+              Ventilation du temps de travail par département sur un mois donné.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="space-y-1.5">
+                <Label htmlFor="report-month" className="text-xs font-semibold text-slate-700">
+                  Mois
+                </Label>
+                <Input
+                  id="report-month"
+                  type="month"
+                  value={reportMonth}
+                  onChange={(e) => {
+                    setReportMonth(e.target.value);
+                    setGlobalReportData(null);
+                  }}
+                  className="text-xs h-9"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="report-dept" className="text-xs font-semibold text-slate-700">
+                  Département
+                </Label>
+                <DepartmentCombobox
+                  id="report-dept"
+                  value={reportDepartment}
+                  onChange={(dept: string) => {
+                    setReportDepartment(dept || "ALL");
+                    setGlobalReportData(null);
+                  }}
+                  departments={departments}
+                  className="bg-white font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Generate Button */}
+            <Button
+              onClick={handleGenerateGlobalReport}
+              disabled={isGlobalReportLoading}
+              className="w-full bg-primary hover:bg-blue-800 text-white text-xs gap-1.5"
+            >
+              {isGlobalReportLoading ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Chargement…
+                </>
+              ) : (
+                <>
+                  <RotateCw className="h-3.5 w-3.5" />
+                  Générer le rapport
+                </>
+              )}
+            </Button>
+
+            {/* Report Content */}
+            {globalReportData && (
+              <div className="space-y-6">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-emerald-700">
+                        Travail Effectif
+                      </span>
+                      <PieChartIcon className="h-4 w-4 text-emerald-500" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-emerald-900 mt-1">
+                      {formatTotalMinutes(globalReportData.totalEffective)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-amber-50 p-4 border border-amber-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-amber-700">
+                        Pause Déjeuner
+                      </span>
+                      <PieChartIcon className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-amber-900 mt-1">
+                      {formatTotalMinutes(globalReportData.totalLunch)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-blue-50 p-4 border border-blue-100">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-blue-700">
+                        Pauses Matin/Soir
+                      </span>
+                      <PieChartIcon className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <p className="text-2xl font-extrabold text-blue-900 mt-1">
+                      {formatTotalMinutes(globalReportData.totalMorningAfternoon)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pie Chart */}
+                <div className="flex flex-col md:flex-row gap-6 items-start">
+                  <div className="md:w-1/2 flex items-center justify-center h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: "Travail Effectif", value: globalReportData.totalEffective, color: "#10b981" },
+                            { name: "Pause Déjeuner", value: globalReportData.totalLunch, color: "#f59e0b" },
+                            { name: "Pauses Matin/Soir", value: globalReportData.totalMorningAfternoon, color: "#3b82f6" },
+                          ].filter((d) => d.value > 0)}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={80}
+                          paddingAngle={4}
+                          dataKey="value"
+                          label={false}
+                          labelLine={false}
+                        >
+                          {[
+                            { name: "Travail Effectif", value: globalReportData.totalEffective, color: "#10b981" },
+                            { name: "Pause Déjeuner", value: globalReportData.totalLunch, color: "#f59e0b" },
+                            { name: "Pauses Matin/Soir", value: globalReportData.totalMorningAfternoon, color: "#3b82f6" },
+                          ].filter((d) => d.value > 0).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Legend
+                          verticalAlign="bottom"
+                          height={36}
+                          iconType="circle"
+                          iconSize={8}
+                          formatter={(value, entry: any) => {
+                            const chartData = [
+                              { name: "Travail Effectif", value: globalReportData.totalEffective, color: "#10b981" },
+                              { name: "Pause Déjeuner", value: globalReportData.totalLunch, color: "#f59e0b" },
+                              { name: "Pauses Matin/Soir", value: globalReportData.totalMorningAfternoon, color: "#3b82f6" },
+                            ].filter((d) => d.value > 0);
+                            const total = chartData.reduce((acc, curr) => acc + curr.value, 0);
+                            const percent = total > 0 ? ((entry.payload.value / total) * 100).toFixed(0) : 0;
+                            return (
+                              <span className="text-xs font-medium text-slate-700">
+                                {value} ({percent}%)
+                              </span>
+                            );
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <div className="md:w-1/2 space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Détail des durées
+                    </h4>
+                    <div className="space-y-2">
+                      {globalReportData.totalEffective > 0 && (
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                          <div className="flex items-center gap-2.5">
+                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#10b981" }} />
+                            <span className="text-xs font-semibold text-slate-700">Travail Effectif</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-slate-900">
+                              {formatTotalMinutes(globalReportData.totalEffective)}
+                            </span>
+                            {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0 && (
+                              <span className="text-[10px] text-slate-400 block font-medium">
+                                {Math.round((globalReportData.totalEffective / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {globalReportData.totalLunch > 0 && (
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                          <div className="flex items-center gap-2.5">
+                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+                            <span className="text-xs font-semibold text-slate-700">Pause Déjeuner</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-slate-900">
+                              {formatTotalMinutes(globalReportData.totalLunch)}
+                            </span>
+                            {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0 && (
+                              <span className="text-[10px] text-slate-400 block font-medium">
+                                {Math.round((globalReportData.totalLunch / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {globalReportData.totalMorningAfternoon > 0 && (
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                          <div className="flex items-center gap-2.5">
+                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+                            <span className="text-xs font-semibold text-slate-700">Pauses Matin/Soir</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-slate-900">
+                              {formatTotalMinutes(globalReportData.totalMorningAfternoon)}
+                            </span>
+                            {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0 && (
+                              <span className="text-[10px] text-slate-400 block font-medium">
+                                {Math.round((globalReportData.totalMorningAfternoon / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {(globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon) === 0 && (
+                        <div className="text-center py-4 text-slate-400 text-xs">
+                          Aucune donnée de pointage pour cette période.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PDF Export Button */}
+                <div className="space-y-2">
+                  <Button
+                    onClick={handleExportGlobalReportPDF}
+                    disabled={globalReportExporting || !checkExportLimit()}
+                    variant="outline"
+                    className="w-full h-9 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
+                  >
+                    {globalReportExporting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                    ) : (
+                      <PieChartIcon className="h-3.5 w-3.5 text-slate-500" />
+                    )}
+                    <span>Exporter PDF</span>
+                  </Button>
+                  <p className="text-center text-[10px] text-slate-500">
+                    Exports restants aujourd'hui : {getRemainingExports()}/{MAX_EXPORTS_PER_DAY}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!globalReportData && !isGlobalReportLoading && (
+              <div className="text-center py-8 text-slate-400 text-xs">
+                Sélectionnez un mois et un département, puis cliquez sur "Générer le rapport".
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Hidden PDF Report Container ── */}
+      <div id="global-report-pdf-container" className="hidden bg-white p-8">
+        <div style={{ maxWidth: "800px", margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
+          {/* Header */}
+          <div className="mb-8 pb-4 border-b-2 border-slate-200">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary">
+                <PieChartIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Rapport Mensuel Global</h1>
+                <p className="text-sm text-slate-500">
+                  {reportDepartment === "ALL" ? "Tous les départements" : reportDepartment} • {reportMonth}
+                </p>
+              </div>
+            </div>
+            <div className="text-xs text-slate-400">
+              Généré le {new Date().toLocaleDateString("fr-FR")} • {globalReportData?.attendanceCount || 0} jour(s) de pointage
+            </div>
+          </div>
+
+          {/* Summary Table */}
+          <table className="w-full border-collapse mb-8" style={{ fontSize: "11px" }}>
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="text-left p-3 font-semibold text-slate-700">Catégorie</th>
+                <th className="text-right p-3 font-semibold text-slate-700">Pourcentage</th>
+                <th className="text-right p-3 font-semibold text-slate-700">Durée</th>
+              </tr>
+            </thead>
+            <tbody>
+              {globalReportData?.totalEffective && globalReportData.totalEffective > 0 && (
+                <tr className="border-b border-slate-100">
+                  <td className="p-3 text-slate-800 flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#10b981" }} />
+                    Travail Effectif
+                  </td>
+                  <td className="p-3 text-right font-semibold text-slate-900">
+                    {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0
+                      ? Math.round((globalReportData.totalEffective / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)
+                      : 0}%
+                  </td>
+                  <td className="p-3 text-right text-slate-600">
+                    {formatTotalMinutes(globalReportData.totalEffective)}
+                  </td>
+                </tr>
+              )}
+              {globalReportData?.totalLunch && globalReportData.totalLunch > 0 && (
+                <tr className="border-b border-slate-100">
+                  <td className="p-3 text-slate-800 flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+                    Pause Déjeuner
+                  </td>
+                  <td className="p-3 text-right font-semibold text-slate-900">
+                    {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0
+                      ? Math.round((globalReportData.totalLunch / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)
+                      : 0}%
+                  </td>
+                  <td className="p-3 text-right text-slate-600">
+                    {formatTotalMinutes(globalReportData.totalLunch)}
+                  </td>
+                </tr>
+              )}
+              {globalReportData?.totalMorningAfternoon && globalReportData.totalMorningAfternoon > 0 && (
+                <tr className="border-b border-slate-100">
+                  <td className="p-3 text-slate-800 flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
+                    Pauses Matin/Soir
+                  </td>
+                  <td className="p-3 text-right font-semibold text-slate-900">
+                    {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0
+                      ? Math.round((globalReportData.totalMorningAfternoon / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)
+                      : 0}%
+                  </td>
+                  <td className="p-3 text-right text-slate-600">
+                    {formatTotalMinutes(globalReportData.totalMorningAfternoon)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* Chart */}
+          <div className="flex justify-center">
+            <ResponsiveContainer width={600} height={300}>
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: "Travail Effectif", value: globalReportData?.totalEffective || 0, color: "#10b981" },
+                    { name: "Pause Déjeuner", value: globalReportData?.totalLunch || 0, color: "#f59e0b" },
+                    { name: "Pauses Matin/Soir", value: globalReportData?.totalMorningAfternoon || 0, color: "#3b82f6" },
+                  ].filter((d) => d.value > 0)}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={4}
+                  dataKey="value"
+                >
+                  {[
+                    { name: "Travail Effectif", value: globalReportData?.totalEffective || 0, color: "#10b981" },
+                    { name: "Pause Déjeuner", value: globalReportData?.totalLunch || 0, color: "#f59e0b" },
+                    { name: "Pauses Matin/Soir", value: globalReportData?.totalMorningAfternoon || 0, color: "#3b82f6" },
+                  ].filter((d) => d.value > 0).map((entry, index) => (
+                    <Cell key={`pdf-cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  iconType="circle"
+                  iconSize={8}
+                  wrapperStyle={{ fontSize: "11px" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -85,7 +85,7 @@ export function QuickActionsPanel({ onAddEmployee, onAssignTask }: QuickActionsP
         </Button>
 
         <Button
-          onClick={() => handleAction("Exporter Rapport", "/admin/attendance")}
+          onClick={() => handleAction("Exporter Rapport", "/admin/attendance?open_report=true")}
           variant="ghost"
           className="w-full justify-start gap-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 h-9 transition-colors text-xs font-semibold"
         >
