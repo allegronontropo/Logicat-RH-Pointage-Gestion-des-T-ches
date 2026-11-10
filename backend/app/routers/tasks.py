@@ -147,25 +147,31 @@ def update_task_endpoint(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(require_admin)],
 ) -> TaskResponse:
-    task = db.get(Task, task_id)
-    if task is None:
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         )
 
-    print(f"DEBUG UPDATE TASK {task_id}: {task_data.model_dump(exclude_unset=True)}")
+    # 1. Print to terminal to see exactly what Pydantic parsed
+    print("PARSED PAYLOAD:", task_data.model_dump())
 
-    update_data = task_data.model_dump(exclude_unset=True)
+    # 2. Apply updates manually field by field
+    if task_data.title is not None:
+        task.title = task_data.title
+    if task_data.description is not None:
+        task.description = task_data.description
+    if task_data.priority is not None:
+        task.priority = task_data.priority
+    if task_data.due_date is not None:
+        task.due_date = task_data.due_date
+    if task_data.assigned_to is not None:
+        task.assigned_to = task_data.assigned_to
 
-    # Force status update if provided
-    if "status" in update_data and update_data["status"] is not None:
-        task.status = update_data["status"]
-        del update_data["status"]
-
-    # Apply the rest
-    for key, value in update_data.items():
-        setattr(task, key, value)
+    # 3. FORCE STATUS UPDATE
+    if task_data.status is not None:
+        task.status = task_data.status
 
     db.commit()
     db.refresh(task)
