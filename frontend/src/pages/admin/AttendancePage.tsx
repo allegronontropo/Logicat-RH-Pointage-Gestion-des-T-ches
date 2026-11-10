@@ -151,6 +151,18 @@ export default function AttendancePage() {
     }
   }, [searchParams, setSearchParams]);
 
+  // Handle URL parameter to auto-open the absence declaration modal
+  useEffect(() => {
+    const openAbsence = searchParams.get("open_absence");
+    if (openAbsence === "true") {
+      setIsDeclareOpen(true);
+      // Remove the param from URL so a page refresh doesn't reopen it
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("open_absence");
+      setSearchParams(newParams.toString(), { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   // Helper to format minutes as "450h 30m"
   function formatTotalMinutes(mins: number): string {
     const h = Math.floor(mins / 60);
