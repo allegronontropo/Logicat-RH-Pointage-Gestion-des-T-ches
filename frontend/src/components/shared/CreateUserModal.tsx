@@ -20,14 +20,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  createUser,
+import { createUser,
   type UserCreatePayload,
 } from "@/api/users";
+import { DepartmentCombobox } from "@/components/shared/DepartmentCombobox";
 
 interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** List of unique departments for the department combobox. */
+  departments?: string[];
   /** Called with the newly-created user's display name after a successful creation. */
   onSuccess?: (name: string) => void;
 }
@@ -236,12 +238,11 @@ export function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalP
                   <Label htmlFor="cu-dept" className="text-xs font-semibold text-slate-700">
                     Département
                   </Label>
-                  <Input
-                    id="cu-dept"
-                    placeholder="Ex : Ingénierie, RH, Finance"
-                    value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value })}
-                    className="text-xs h-8 bg-white"
+                  <DepartmentCombobox
+                    departments={departments || []}
+                    value={form.department || "ALL"}
+                    onChange={(dept) => setForm({ ...form, department: dept || undefined })}
+                    className="text-xs h-8 bg-slate-50/70"
                   />
                 </div>
                 <div className="space-y-1">

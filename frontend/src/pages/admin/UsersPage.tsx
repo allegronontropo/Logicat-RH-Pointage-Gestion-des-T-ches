@@ -400,7 +400,10 @@ export default function UsersPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refetch()}
+            onClick={() => {
+              queryClient.invalidateQueries();
+              refetch();
+            }}
             disabled={isFetching}
             className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200"
           >
@@ -837,6 +840,7 @@ export default function UsersPage() {
       <CreateUserModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
+        departments={departments}
         onSuccess={async (userName) => {
           await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
           await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -974,17 +978,12 @@ export default function UsersPage() {
                     <Label htmlFor="edit-dept" className="text-xs font-semibold text-slate-700">
                       Département
                     </Label>
-                    <Input
-                      id="edit-dept"
-                      value={editForm.department || ""}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          department: e.target.value,
-                        })
-                      }
-                      className="text-xs h-8 bg-white"
-                    />
+                  <DepartmentCombobox
+                    departments={departments}
+                    value={editForm.department || "ALL"}
+                    onChange={(dept) => setEditForm({ ...editForm, department: dept || undefined })}
+                    className="text-xs h-8 bg-slate-50/70"
+                  />
                   </div>
 
                   <div className="space-y-1">

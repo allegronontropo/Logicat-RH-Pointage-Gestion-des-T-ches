@@ -467,7 +467,10 @@ export default function TasksPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => refetch()}
+            onClick={() => {
+              queryClient.invalidateQueries();
+              refetch();
+            }}
             disabled={isFetching}
             className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200"
           >
