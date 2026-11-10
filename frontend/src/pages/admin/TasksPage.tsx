@@ -90,6 +90,7 @@ export default function TasksPage() {
     title: "",
     description: "",
     priority: "MEDIUM",
+    status: "TODO",
     due_date: "",
     assigned_to: 0,
   });
@@ -304,6 +305,7 @@ export default function TasksPage() {
       title: task.title,
       description: task.description || "",
       priority: task.priority,
+      status: task.status,
       due_date: task.due_date || "",
       assigned_to: task.assigned_to,
     });
@@ -327,6 +329,7 @@ export default function TasksPage() {
         title: editForm.title.trim(),
         description: editForm.description?.trim() || undefined,
         priority: editForm.priority,
+        status: editForm.status,
         due_date: editForm.due_date || null,
         assigned_to: editForm.assigned_to
           ? Number(editForm.assigned_to)
@@ -335,6 +338,7 @@ export default function TasksPage() {
 
       await refetch();
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
       setEditingTask(null);
       setFeedback({
         type: "success",
@@ -874,12 +878,13 @@ export default function TasksPage() {
                 return (
                   <TableRow
                     key={task.id}
-                    className="hover:bg-slate-50/70 transition-colors"
+                    className="group hover:bg-slate-50/70 transition-colors cursor-pointer"
+                    onClick={() => handleOpenEdit(task)}
                   >
                     {/* Titre & Description */}
                     <TableCell>
                       <div className="space-y-0.5 max-w-sm">
-                        <p className="text-xs font-bold text-slate-900 truncate">
+                        <p className="text-xs font-bold text-slate-900 truncate group-hover:text-primary transition-colors">
                           {task.title}
                         </p>
                         {task.description && (
@@ -962,12 +967,13 @@ export default function TasksPage() {
                             variant="ghost"
                             size="sm"
                             className="h-8 w-8 p-0 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <MoreVertical className="h-4 w-4" />
                             <span className="sr-only">Actions</span>
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
                           <DropdownMenuLabel>Action Tâche #{task.id}</DropdownMenuLabel>
                           <DropdownMenuSeparator />
 
@@ -1124,7 +1130,7 @@ export default function TasksPage() {
               />
             </div>
 
-            {/* Assignee & Priority */}
+            {/* Assignee & Priority & Status */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-task-assignee" className="text-xs font-semibold text-slate-700">
@@ -1159,6 +1165,28 @@ export default function TasksPage() {
                   <option value="HIGH">Haute</option>
                 </select>
               </div>
+            </div>
+
+            {/* Status */}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-task-status" className="text-xs font-semibold text-slate-700">
+                Statut *
+              </Label>
+              <select
+                id="edit-task-status"
+                value={editForm.status || "TODO"}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    status: e.target.value as "TODO" | "IN_PROGRESS" | "DONE",
+                  })
+                }
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+              >
+                <option value="TODO">À faire</option>
+                <option value="IN_PROGRESS">En cours</option>
+                <option value="DONE">Terminé</option>
+              </select>
             </div>
 
             {/* Due Date */}

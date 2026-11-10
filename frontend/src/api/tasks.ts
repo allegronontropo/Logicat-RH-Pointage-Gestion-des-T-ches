@@ -19,6 +19,7 @@ export interface TaskUpdatePayload {
   title?: string;
   description?: string;
   priority?: string;
+  status?: string;
   due_date?: string | null;
   assigned_to?: number;
 }
