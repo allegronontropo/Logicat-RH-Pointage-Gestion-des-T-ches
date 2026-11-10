@@ -154,12 +154,21 @@ def update_task_endpoint(
             detail="Task not found",
         )
 
-    update_dict = task_data.model_dump(exclude_unset=True)
-    for field, value in update_dict.items():
-        setattr(task, field, value)
+    print(f"DEBUG UPDATE TASK {task_id}: {task_data.model_dump(exclude_unset=True)}")
+
+    update_data = task_data.model_dump(exclude_unset=True)
+
+    # Force status update if provided
+    if "status" in update_data and update_data["status"] is not None:
+        task.status = update_data["status"]
+        del update_data["status"]
+
+    # Apply the rest
+    for key, value in update_data.items():
+        setattr(task, key, value)
 
     db.commit()
-    # Reload with assignee join so the response includes the employee's name
+    db.refresh(task)
     task = _load_task_with_assignee(db, task.id)
     return TaskResponse.from_orm_with_assignee(task)
 
