@@ -30,7 +30,7 @@ import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
 import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { QuickActionsPanel } from "@/components/dashboard/QuickActionsPanel";
 import { RecentAbsences } from "@/components/dashboard/RecentAbsences";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CreateUserModal } from "@/components/shared/CreateUserModal";
 import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
