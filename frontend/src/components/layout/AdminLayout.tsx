@@ -76,7 +76,7 @@ export default function AdminLayout() {
       >
         <div className="flex h-16 items-center justify-between border-b border-slate-800 px-6">
           <div className="flex items-center gap-2">
-            <img src="/images/Logo-logicat-Digital.png" alt="LOGICAT" className="h-8 w-auto" />
+            <img src="/images/Logo-logicat-Digital.webp" alt="LOGICAT" className="h-8 w-auto" />
           </div>
           <button
             onClick={() => setMobileMenuOpen(false)}
@@ -145,7 +145,7 @@ export default function AdminLayout() {
       <aside className="hidden lg:flex w-64 flex-shrink-0 flex-col bg-slate-900 border-r border-slate-800 select-none">
         {/* LOGICAT Brand Logo */}
         <div className="flex h-16 items-center gap-2 border-b border-slate-800 px-6">
-          <img src="/images/Logo-logicat-Digital.png" alt="LOGICAT" className="h-8 w-auto" />
+          <img src="/images/Logo-logicat-Digital.webp" alt="LOGICAT" className="h-8 w-auto" />
         </div>
 
         {/* Navigation Groups */}
