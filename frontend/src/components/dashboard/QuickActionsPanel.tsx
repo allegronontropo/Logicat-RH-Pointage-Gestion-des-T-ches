@@ -76,7 +76,7 @@ export function QuickActionsPanel({ onAddEmployee, onAssignTask }: QuickActionsP
 
         {/* Tertiary Action: Declare Absence */}
         <Button
-          onClick={() => handleAction("Déclarer Absence", "/admin/attendance")}
+          onClick={() => handleAction("Déclarer Absence", "/admin/attendance?open_absence=true")}
           variant="ghost"
           className="w-full justify-start gap-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 h-9 transition-colors text-xs font-semibold"
         >

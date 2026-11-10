@@ -1,6 +1,5 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 export interface KpiCardProps {
@@ -21,7 +20,7 @@ export function KpiCard({
   icon: Icon,
   iconBgColor = "bg-blue-50",
   iconTextColor = "text-blue-600",
-  trendText = "—",
+  trendText,
   subtitle,
   to,
   onClick,
@@ -49,10 +48,12 @@ export function KpiCard({
           </div>
 
           {/* Subtle neutral indicator without fake percentage */}
-          <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-slate-100/80 text-slate-500 border border-slate-200/60">
-            <Minus className="h-2.5 w-2.5 text-slate-400" />
-            <span className="font-mono">{trendText}</span>
-          </div>
+          {trendText && (
+            <div className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-slate-100/80 text-slate-500 border border-slate-200/60">
+              <Minus className="h-2.5 w-2.5 text-slate-400" />
+              <span className="font-mono">{trendText}</span>
+            </div>
+          )}
         </div>
 
         {/* Numbers & Labels */}

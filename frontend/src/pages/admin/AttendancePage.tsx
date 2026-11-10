@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import {
   Clock,
   CalendarX,
@@ -18,6 +18,7 @@ import {
   ChevronsUpDown,
   BarChart3,
   PieChart as PieChartIcon,
+  ArrowRight,
 } from "lucide-react";
 import {
   Table,
@@ -1095,28 +1096,13 @@ export default function AttendancePage() {
                     {/* Pauses (Matin / Déj / Soir) */}
                     <TableCell className="py-2">
                       {item.breaks && item.breaks.length > 0 ? (
-                        <HoverCard>
-                          <HoverCardTrigger asChild>
-                            <span className="cursor-pointer inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 transition-colors">
-                              {item.breaks.length} pause{item.breaks.length > 1 ? "s" : ""}
-                            </span>
-                          </HoverCardTrigger>
-                          <HoverCardContent className="w-64 p-3">
-                            <h4 className="text-xs font-bold text-slate-800 mb-2">Détail des pauses</h4>
-                            <div className="space-y-2">
-                              {item.breaks.map((b, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-xs">
-                                  <span className="font-medium text-slate-600">
-                                    {b.type === "MORNING" ? "Matin" : b.type === "LUNCH" ? "Déjeuner" : "Soir"}
-                                  </span>
-                                  <span className="font-mono text-slate-500">
-                                    {formatTimeAMPM(b.start_time)} - {b.end_time ? formatTimeAMPM(b.end_time) : "En cours"}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </HoverCardContent>
-                        </HoverCard>
+                        <Link
+                          to={`/admin/users/${item.employee_id}`}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-blue-100 hover:text-blue-700 transition-colors cursor-pointer"
+                        >
+                          {item.breaks.length} pause{item.breaks.length > 1 ? "s" : ""}
+                          <ArrowRight className="h-3 w-3 text-slate-500" />
+                        </Link>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
