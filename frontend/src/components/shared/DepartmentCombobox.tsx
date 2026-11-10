@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import * as React from "react"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import {
   Command,
   CommandEmpty,
@@ -8,102 +9,62 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
-interface DepartmentComboboxProps {
-  /** Currently selected department name, or "ALL" / "" for no filter */
-  value: string;
-  /** Called with the new department name, or "" when "all" is selected */
-  onChange: (dept: string) => void;
-  /** List of department name strings to display */
-  departments: string[];
-  /** Label shown when no specific department is selected */
-  allOptionLabel?: string;
-  /** Extra class applied to the trigger button */
-  className?: string;
-  disabled?: boolean;
-}
+export function DepartmentCombobox({ departments = [], value, onChange, className }: any) {
+  const [open, setOpen] = React.useState(false)
+  const selectedDepartment = departments.find((dept: string) => String(dept) === String(value))
 
-export function DepartmentCombobox({
-  value,
-  onChange,
-  departments,
-  allOptionLabel = "Tous les départements",
-  className,
-  disabled = false,
-}: DepartmentComboboxProps) {
-  const [open, setOpen] = useState(false);
-
-  const isAllSelected = !value || value === "ALL";
-  const displayLabel = isAllSelected ? allOptionLabel : value;
+  const handleSelect = (dept: string) => {
+    onChange(dept);
+    setOpen(false);
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="outline"
           role="combobox"
           aria-expanded={open}
-          disabled={disabled}
           className={cn(
-            "flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50",
+            "h-9 w-full justify-between rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50/70 focus:border-primary focus:bg-white focus:outline-none focus:ring-1 focus:ring-primary",
             className
           )}
         >
-          <span className="truncate">{displayLabel}</span>
+          <span className="truncate">
+            {selectedDepartment ? selectedDepartment : "Tous les départements"}
+          </span>
           <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 text-slate-400" />
-        </button>
+        </Button>
       </PopoverTrigger>
-
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[220px] p-0">
-        <Command
-          filter={(itemValue, search) => {
-            if (!search.trim()) return 1;
-            if (itemValue.toLowerCase().includes(search.toLowerCase())) return 1;
-            return 0;
-          }}
-        >
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-[220px] p-0" align="start">
+        <Command>
           <CommandInput placeholder="Rechercher un département..." />
           <CommandList>
             <CommandEmpty>Aucun département trouvé.</CommandEmpty>
             <CommandGroup>
-              {/* "All" option */}
               <CommandItem
-                key="__all__"
-                value={allOptionLabel}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange("");
-                  setOpen(false);
-                }}
+                value="all"
+                onSelect={() => handleSelect("")}
+                onClick={() => handleSelect("")}
               >
-                <Check
-                  className={cn(
-                    "mr-2 h-3.5 w-3.5 text-primary",
-                    isAllSelected ? "opacity-100" : "opacity-0"
-                  )}
-                />
-                <span className="font-medium text-slate-800">{allOptionLabel}</span>
+                <Check className={cn("mr-2 h-4 w-4", !value || value === "ALL" ? "opacity-100" : "opacity-0")} />
+                Tous les départements
               </CommandItem>
-
-              {/* Department options */}
-              {departments.map((dept) => (
+              {departments.map((dept: string) => (
                 <CommandItem
                   key={dept}
                   value={dept}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    onChange(dept);
-                    setOpen(false);
-                  }}
+                  onSelect={() => handleSelect(dept)}
+                  onClick={() => handleSelect(dept)} // CRITICAL CLICK FALLBACK
                 >
-                  <Check
-                    className={cn(
-                      "mr-2 h-3.5 w-3.5 text-primary",
-                      value === dept ? "opacity-100" : "opacity-0"
-                    )}
-                  />
+                  <Check className={cn("mr-2 h-4 w-4", String(value) === String(dept) ? "opacity-100" : "opacity-0")} />
                   <span className="truncate">{dept}</span>
                 </CommandItem>
               ))}
@@ -112,5 +73,5 @@ export function DepartmentCombobox({
         </Command>
       </PopoverContent>
     </Popover>
-  );
+  )
 }
