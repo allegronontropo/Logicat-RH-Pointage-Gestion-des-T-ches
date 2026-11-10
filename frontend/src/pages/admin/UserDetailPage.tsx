@@ -849,20 +849,22 @@ export default function UserDetailPage() {
               </div>
 
               {/* Action Buttons (Passport Bottom) */}
-              <div className="flex items-center gap-2 mt-6 pt-5 border-t border-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-6 pt-5 border-t border-slate-100">
+                {/* Modifier — Primary */}
                 <Button
                   onClick={handleOpenEdit}
-                  variant="outline"
+                  variant="default"
                   size="sm"
-                  className="flex-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="h-9 flex-1 text-xs font-semibold text-white bg-primary hover:bg-blue-800"
                 >
-                  <Pencil className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                  <Pencil className="h-3.5 w-3.5 mr-1 text-white" />
                   Modifier
                 </Button>
 
+                {/* Désactiver / Activer — Outline */}
                 <Button
                   onClick={handleToggleStatus}
-                  variant={user.is_active ? "outline" : "default"}
+                  variant="outline"
                   size="sm"
                   disabled={isTogglingStatus || user.id === currentUser?.id}
                   title={
@@ -870,41 +872,41 @@ export default function UserDetailPage() {
                       ? "Vous ne pouvez pas désactiver votre propre compte."
                       : undefined
                   }
-                  className={`flex-1 text-xs font-semibold ${
+                  className={`h-9 flex-1 text-xs font-semibold ${
                     user.is_active
                       ? "text-rose-600 border-rose-200 hover:bg-rose-50"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "text-emerald-600 border-emerald-200 hover:bg-emerald-50"
                   }`}
                 >
                   {isTogglingStatus ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : user.is_active ? (
                     <>
-                      <UserX className="h-3.5 w-3.5 mr-1" />
+                      <UserX className="h-3.5 w-3.5 mr-1 text-rose-600" />
                       Désactiver
                     </>
                   ) : (
                     <>
-                      <UserCheck className="h-3.5 w-3.5 mr-1" />
+                      <UserCheck className="h-3.5 w-3.5 mr-1 text-emerald-600" />
                       Activer
                     </>
                   )}
                 </Button>
-              </div>
 
-              {/* Delete Button */}
-              {user && user.id !== currentUser?.id && (
-                <Button
-                  onClick={handleOpenDelete}
-                  disabled={isDeleting}
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  Supprimer
-                </Button>
-              )}
+                {/* Supprimer — Outline, red */}
+                {user && user.id !== currentUser?.id && (
+                  <Button
+                    onClick={handleOpenDelete}
+                    disabled={isDeleting}
+                    variant="outline"
+                    size="sm"
+                    className="h-9 flex-1 text-xs font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1 text-rose-600" />
+                    Supprimer
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
