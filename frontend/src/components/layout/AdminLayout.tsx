@@ -9,14 +9,13 @@
  */
 
 import { useState } from "react";
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, Outlet, Link, useNavigate, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
   Clock,
   CheckSquare,
   LogOut,
-  Building2,
   Menu,
   X,
   ChevronRight,
@@ -76,16 +75,8 @@ export default function AdminLayout() {
         }`}
       >
         <div className="flex h-16 items-center justify-between border-b border-slate-800 px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-md shadow-blue-500/20">
-              <Building2 className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm font-bold tracking-tight text-white">LOGICAT</p>
-              <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
-                Portail Admin RH
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <img src="/logo-logicat.png" alt="LOGICAT" className="h-8 w-auto" />
           </div>
           <button
             onClick={() => setMobileMenuOpen(false)}
@@ -153,21 +144,8 @@ export default function AdminLayout() {
       {/* ── Desktop Sleek Dark Sidebar ────────────────────────── */}
       <aside className="hidden lg:flex w-64 flex-shrink-0 flex-col bg-slate-900 border-r border-slate-800 select-none">
         {/* LOGICAT Brand Logo */}
-        <div className="flex h-16 items-center gap-3 border-b border-slate-800 px-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 shadow-md shadow-blue-500/20">
-            <Building2 className="h-5 w-5 text-white stroke-[2.2]" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <p className="text-sm font-extrabold tracking-tight text-white">LOGICAT</p>
-              <span className="rounded bg-blue-500/20 px-1.5 py-0.2 text-[9px] font-bold text-blue-400">
-                PRO
-              </span>
-            </div>
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Portail Admin RH
-            </p>
-          </div>
+        <div className="flex h-16 items-center gap-2 border-b border-slate-800 px-6">
+          <img src="/logo-logicat.png" alt="LOGICAT" className="h-8 w-auto" />
         </div>
 
         {/* Navigation Groups */}
@@ -198,10 +176,13 @@ export default function AdminLayout() {
           ))}
         </nav>
 
-        {/* Sidebar Footer User Card */}
-        <div className="border-t border-slate-800/80 p-3.5">
-          <div className="flex items-center gap-3 rounded-xl bg-slate-800/50 p-2.5 border border-slate-800">
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-sm">
+        {/* Sidebar Footer User Card (clickable profile link) */}
+        <Link
+          to={`/admin/users/${user?.id}`}
+          className="border-t border-slate-800/80 p-3.5 block"
+        >
+          <div className="flex items-center gap-3 rounded-xl bg-slate-800/50 p-2.5 border border-slate-800 hover:bg-slate-800 hover:border-slate-700 transition-colors cursor-pointer">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 font-bold text-xs text-white">
               {user?.first_name?.[0] || "A"}
               {user?.last_name?.[0] || "D"}
             </div>
@@ -209,15 +190,12 @@ export default function AdminLayout() {
               <p className="truncate text-xs font-semibold text-white">
                 {user?.first_name} {user?.last_name}
               </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span className="text-[10px] font-medium text-slate-400">
-                  Admin RH Connecté
-                </span>
-              </div>
+              <p className="truncate text-[11px] text-slate-400">
+                {user?.email}
+              </p>
             </div>
           </div>
-        </div>
+        </Link>
       </aside>
 
       {/* ── Main Container (Header + Content) ─────────────────── */}
@@ -241,37 +219,20 @@ export default function AdminLayout() {
             </div>
           </div>
 
-          {/* Right: User Profile & Logout */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            {/* User Profile Pill & Logout */}
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex flex-col text-right">
-                <span className="text-xs font-bold text-slate-800">
-                  {user?.first_name} {user?.last_name}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-400">
-                  {user?.email}
-                </span>
-              </div>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-primary shadow-sm">
-                {user?.first_name?.[0] || "A"}
-                {user?.last_name?.[0] || "D"}
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLogout}
-                className="h-9 px-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
-                title="Déconnexion"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden md:inline ml-1.5 text-xs font-semibold">
-                  Déconnexion
-                </span>
-              </Button>
-            </div>
+          {/* Right: Logout */}
+          <div className="flex items-center justify-end flex-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleLogout}
+              className="h-9 px-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
+              title="Déconnexion"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden md:inline ml-1.5 text-xs font-semibold">
+                Déconnexion
+              </span>
+            </Button>
           </div>
         </header>
 

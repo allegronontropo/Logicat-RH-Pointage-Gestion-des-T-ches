@@ -20,7 +20,6 @@ import {
   TrendingUp,
   Clock,
   RotateCw,
-  Sparkles,
   Calendar,
 } from "lucide-react";
 import { getAdminDashboard } from "@/api/dashboard";
@@ -90,10 +89,6 @@ export default function AdminDashboardPage() {
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 font-sans">
               Tableau de bord RH
             </h1>
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-primary border border-blue-200/60">
-              <Sparkles className="h-3 w-3 text-primary" />
-              Vue Pro
-            </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 capitalize flex items-center gap-1.5">
             <Calendar className="h-3.5 w-3.5 text-slate-400" />
