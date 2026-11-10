@@ -106,6 +106,18 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  // Pagination for upcoming deadlines (10 per page)
+  const DEADLINES_PAGE_SIZE = 10;
+  const [currentDeadlinesPage, setCurrentDeadlinesPage] = useState(1);
+  const totalDeadlinesPages = Math.max(
+    1,
+    Math.ceil(upcomingTasks.length / DEADLINES_PAGE_SIZE)
+  );
+  const paginatedDeadlines = upcomingTasks.slice(
+    (currentDeadlinesPage - 1) * DEADLINES_PAGE_SIZE,
+    currentDeadlinesPage * DEADLINES_PAGE_SIZE
+  );
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
       {/* ── Top Page Banner / Controls ────────────────────────── */}
@@ -273,12 +285,12 @@ export default function AdminDashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
-              {upcomingTasks.length === 0 ? (
+              {paginatedDeadlines.length === 0 ? (
                 <div className="text-center py-3">
                   <p className="text-xs text-slate-400">Aucune échéance à venir.</p>
                 </div>
               ) : (
-                upcomingTasks.map((task) => {
+                paginatedDeadlines.map((task) => {
                   const dueDate = new Date(task.due_date!);
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
@@ -321,6 +333,31 @@ export default function AdminDashboardPage() {
                     </div>
                   );
                 })
+              )}
+              {totalDeadlinesPages > 1 && (
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-50">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentDeadlinesPage === 1}
+                    onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage - 1)}
+                    className="text-xs px-2 py-1"
+                  >
+                    Précédent
+                  </Button>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Page {currentDeadlinesPage} / {totalDeadlinesPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentDeadlinesPage === totalDeadlinesPages}
+                    onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage + 1)}
+                    className="text-xs px-2 py-1"
+                  >
+                    Suivant
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
