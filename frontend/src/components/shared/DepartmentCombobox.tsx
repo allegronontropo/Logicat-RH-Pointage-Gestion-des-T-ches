@@ -72,7 +72,7 @@ export function DepartmentCombobox({
               <CommandItem
                 key="__all__"
                 value={allOptionLabel}
-                onPointerDown={(e) => e.preventDefault()}
+                onMouseDown={(e) => e.preventDefault()}
                 onSelect={() => {
                   onChange("");
                   setOpen(false);
@@ -92,7 +92,7 @@ export function DepartmentCombobox({
                 <CommandItem
                   key={dept}
                   value={dept}
-                  onPointerDown={(e) => e.preventDefault()}
+                  onMouseDown={(e) => e.preventDefault()}
                   onSelect={() => {
                     onChange(dept);
                     setOpen(false);

@@ -83,7 +83,6 @@ export function EmployeeCombobox({
         <Command
           filter={(itemValue, search) => {
             if (!search.trim()) return 1;
-            // Case-insensitive substring match
             if (itemValue.toLowerCase().includes(search.toLowerCase())) return 1;
             return 0;
           }}
@@ -92,10 +91,12 @@ export function EmployeeCombobox({
           <CommandList>
             <CommandEmpty>Aucun employé trouvé.</CommandEmpty>
             <CommandGroup>
+              {/* "All" option */}
               {showAllOption && (
                 <CommandItem
                   key="all"
                   value={allOptionLabel}
+                  onMouseDown={(e) => e.preventDefault()}
                   onSelect={() => {
                     onChange(null);
                     setOpen(false);
@@ -104,23 +105,22 @@ export function EmployeeCombobox({
                   <Check
                     className={cn(
                       "mr-2 h-3.5 w-3.5 text-primary",
-                      isAllSelected || !selectedEmployee ? "opacity-100" : "opacity-0"
+                      isAllSelected ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <span className="font-medium text-slate-800">
-                    {allOptionLabel}
-                  </span>
+                  <span className="font-medium text-slate-800">{allOptionLabel}</span>
                 </CommandItem>
               )}
+
+              {/* Employee options */}
               {employees.map((emp) => {
-                const label = `${emp.firstName} ${emp.lastName}${
-                  emp.department ? ` (${emp.department})` : ""
-                }`;
+                const searchValue = `${emp.firstName} ${emp.lastName} ${emp.department ?? ""}`;
                 const isSelected = selectedEmployee?.id === emp.id;
                 return (
                   <CommandItem
                     key={emp.id}
-                    value={label}
+                    value={searchValue}
+                    onMouseDown={(e) => e.preventDefault()}
                     onSelect={() => {
                       onChange(emp.id);
                       setOpen(false);

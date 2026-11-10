@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   X,
   Eye,
-  Building,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -60,6 +59,7 @@ import {
 } from "@/api/users";
 import type { UserDetail } from "@/types";
 import { CreateUserModal } from "@/components/shared/CreateUserModal";
+import { DepartmentCombobox } from "@/components/shared/DepartmentCombobox";
 
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
@@ -411,22 +411,12 @@ export default function UsersPage() {
               <span className="text-xs font-semibold text-slate-500 whitespace-nowrap hidden sm:inline-block">
                 Département :
               </span>
-              <div className="relative">
-                <select
-                  aria-label="Filtrer par département"
-                  value={departmentFilter}
-                  onChange={(e) => setDepartmentFilter(e.target.value)}
-                  className="appearance-none rounded-lg border border-slate-200 bg-slate-50/70 pl-3 pr-8 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer h-9"
-                >
-                  <option value="ALL">Tous les départements</option>
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
-                <Building className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              </div>
+              <DepartmentCombobox
+                value={departmentFilter}
+                onChange={(dept) => setDepartmentFilter(dept || "ALL")}
+                departments={departments}
+                className="appearance-none rounded-lg border-slate-200 bg-slate-50/70 text-xs font-semibold text-slate-700 min-w-[180px]"
+              />
             </div>
           </div>
         </CardContent>
