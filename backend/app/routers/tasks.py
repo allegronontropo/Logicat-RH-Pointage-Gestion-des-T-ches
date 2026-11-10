@@ -154,10 +154,7 @@ def update_task_endpoint(
             detail="Task not found",
         )
 
-    # 1. Print to terminal to see exactly what Pydantic parsed
-    print("PARSED PAYLOAD:", task_data.model_dump())
-
-    # 2. Apply updates manually field by field (excluding status which we force via raw SQL)
+    # Apply updates manually field by field
     if task_data.title is not None:
         task.title = task_data.title
     if task_data.description is not None:
@@ -169,7 +166,7 @@ def update_task_endpoint(
     if task_data.assigned_to is not None:
         task.assigned_to = task_data.assigned_to
 
-    # 3. FORCE STATUS UPDATE via raw SQL to bypass any ORM session issues
+    # Force status update via raw SQL to bypass ORM session issues
     if task_data.status is not None:
         db.execute(
             text("UPDATE tasks SET status = :status WHERE id = :id"),
@@ -178,8 +175,6 @@ def update_task_endpoint(
         print(f"RAW SQL UPDATE: SET status = '{task_data.status}' WHERE id = {task_id}")
 
     db.commit()
-    db.refresh(task)
-    print(f"UPDATED TASK {task.id} STATUS IN DB: {task.status}")
     task = _load_task_with_assignee(db, task.id)
     return TaskResponse.from_orm_with_assignee(task)
 
