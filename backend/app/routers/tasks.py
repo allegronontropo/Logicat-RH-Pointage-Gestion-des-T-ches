@@ -175,6 +175,7 @@ def update_task_endpoint(
 
     db.commit()
     db.refresh(task)
+    print(f"UPDATED TASK {task.id} STATUS IN DB: {task.status}")
     task = _load_task_with_assignee(db, task.id)
     return TaskResponse.from_orm_with_assignee(task)
 
