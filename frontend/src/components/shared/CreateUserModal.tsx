@@ -7,7 +7,7 @@
  *   onSuccess – called after a user is created successfully (use to invalidate caches, show toasts, etc.)
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserPlus, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -20,8 +20,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useQuery } from "@tanstack/react-query";
 import { createUser,
   type UserCreatePayload,
+  listUsers,
 } from "@/api/users";
 import { DepartmentCombobox } from "@/components/shared/DepartmentCombobox";
 
@@ -46,10 +48,33 @@ const DEFAULT_FORM: UserCreatePayload = {
   hire_date: new Date().toISOString().split("T")[0],
 };
 
-export function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalProps) {
+export function CreateUserModal({ isOpen, onClose, onSuccess, departments: departmentsProp = [] }: CreateUserModalProps) {
   const [form, setForm] = useState<UserCreatePayload>(DEFAULT_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  // Fetch departments from existing users so the combobox always has options,
+  // even if the parent hasn't resolved its users query yet.
+  const { data: users = [] } = useQuery({
+    queryKey: ["create-user-modal-departments"],
+    queryFn: () => listUsers({ role: "EMPLOYEE" }),
+    enabled: isOpen,
+  });
+
+  const departments = Array.from(
+    new Set(
+      users
+        .map(
+          (u) =>
+            u.employee_profile?.department ||
+            u.department ||
+            ""
+        )
+        .filter((dept): dept is string => Boolean(dept && dept.trim()))
+    )
+  ).sort();
+
+  const effectiveDepartments = departmentsProp.length > 0 ? departmentsProp : departments;
 
   function handleOpenChange(open: boolean) {
     if (!open) {
@@ -239,7 +264,7 @@ export function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalP
                     Département
                   </Label>
                   <DepartmentCombobox
-                    departments={departments || []}
+                    departments={effectiveDepartments}
                     value={form.department || "ALL"}
                     onChange={(dept) => setForm({ ...form, department: dept || undefined })}
                     className="text-xs h-8 bg-slate-50/70"
