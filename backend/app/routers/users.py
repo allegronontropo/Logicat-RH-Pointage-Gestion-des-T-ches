@@ -11,6 +11,7 @@ Endpoints:
   PATCH  /api/users/{id}/deactivate              Deactivate (self + last-admin protected)
   PATCH  /api/users/{id}/activate                Reactivate
   PATCH  /api/users/{id}/reset-password          Admin sets a new password
+  DELETE /api/users/{id}                         Hard delete (self/last-admin/tasks protected)
 """
 
 from __future__ import annotations
@@ -169,3 +170,20 @@ def reset_password_endpoint(
         )
     user = user_service.reset_password(db, user_id, pwd)
     return UserRead.model_validate(user)
+
+
+@router.delete(
+    "/{user_id}",
+    summary="Delete user",
+    description=(
+        "Permanently delete a user. Blocked if self, last active ADMIN_RH, "
+        "or the employee still has tasks assigned."
+    ),
+)
+def delete_user_endpoint(
+    user_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(require_admin)],
+) -> dict[str, str]:
+    user_service.delete_user(db, user_id, current_user)
+    return {"detail": "User deleted"}

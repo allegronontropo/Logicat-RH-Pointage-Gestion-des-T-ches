@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   X,
   Eye,
+  Trash2,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -44,6 +45,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +65,7 @@ import {
   deactivateUser,
   activateUser,
   resetPassword,
+  deleteUser,
   type UserUpdatePayload,
 } from "@/api/users";
 import type { UserDetail } from "@/types";
@@ -83,6 +94,9 @@ export default function UsersPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserDetail | null>(null);
   const [resetPwdUser, setResetPwdUser] = useState<UserDetail | null>(null);
+  const [deletingUser, setDeletingUser] = useState<UserDetail | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Form States - Edit User
   const [editForm, setEditForm] = useState<UserUpdatePayload>({
@@ -253,6 +267,48 @@ export default function UsersPage() {
       });
     } finally {
       setActionLoadingId(null);
+    }
+  }
+
+  // ── Open Delete Confirmation ────────────────────────────────────
+  function handleOpenDelete(targetUser: UserDetail) {
+    setDeleteError(null);
+    setDeletingUser(targetUser);
+  }
+
+  // ── Confirm Hard Delete ─────────────────────────────────────────
+  async function handleConfirmDelete() {
+    if (!deletingUser) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteUser(deletingUser.id);
+      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["attendances"] });
+      setFeedback({
+        type: "success",
+        message: `L'utilisateur ${deletingUser.first_name} ${deletingUser.last_name} a été supprimé définitivement.`,
+      });
+      setDeletingUser(null);
+    } catch (err: unknown) {
+      const status = (
+        err as { response?: { status?: number; data?: { detail?: string } } }
+      )?.response?.status;
+      const detail = (
+        err as { response?: { data?: { detail?: string } } }
+      )?.response?.data?.detail;
+
+      setDeleteError(
+        status === 409
+          ? "Impossible de supprimer : cet employé a des tâches assignées. Veuillez les réassigner d'abord."
+          : typeof detail === "string"
+          ? detail
+          : "Erreur lors de la suppression."
+      );
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -672,6 +728,23 @@ export default function UsersPage() {
                               <span>Activer le compte</span>
                             </DropdownMenuItem>
                           )}
+
+                          <DropdownMenuSeparator />
+
+                          {/* Supprimer définitivement */}
+                          <DropdownMenuItem
+                            onClick={() => handleOpenDelete(targetUser)}
+                            disabled={isCurrent}
+                            title={
+                              isCurrent
+                                ? "Vous ne pouvez pas supprimer votre propre compte."
+                                : undefined
+                            }
+                            className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            <span>Supprimer</span>
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -1032,6 +1105,71 @@ export default function UsersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── Delete User Confirmation ───────────────────────────── */}
+      <AlertDialog
+        open={Boolean(deletingUser)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            setDeletingUser(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+                <Trash2 className="h-4 w-4" />
+              </div>
+              <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ?
+              Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {deletingUser && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+              <p className="font-bold text-slate-900">
+                {deletingUser.first_name} {deletingUser.last_name}
+              </p>
+              <p className="text-slate-500 mt-0.5">{deletingUser.email}</p>
+            </div>
+          )}
+
+          {deleteError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <span>{deleteError}</span>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>
+              Annuler
+            </AlertDialogCancel>
+            <Button
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+              className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Suppression…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Supprimer définitivement
+                </>
+              )}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -15,7 +15,10 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
+from app.models.attendance import Attendance
+from app.models.break_ import Break
 from app.models.employee import Employee
+from app.models.task import Task
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate
 
@@ -146,6 +149,78 @@ def activate_user(db: Session, target_id: int) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def delete_user(
+    db: Session, target_id: int, current_user: User
+) -> None:
+    """Permanently delete a user and their dependent attendance data.
+
+    Safety rules:
+      - 404 if the user does not exist.
+      - 403 if the target is the current user (no self-deletion).
+      - 409 if the target is the last active ADMIN_RH.
+      - 409 if the target employee still has tasks assigned to them.
+
+    Breaks, attendances and the employee profile are removed explicitly so
+    the cleanup also works on engines that do not enforce ON DELETE CASCADE
+    (e.g. SQLite in tests); PostgreSQL cascades as a safety net.
+    """
+    target = db.get(User, target_id)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if target_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot delete your own account",
+        )
+
+    if target.role == "ADMIN_RH" and target.is_active:
+        active_admins = (
+            db.query(User)
+            .filter(User.role == "ADMIN_RH", User.is_active == True)  # noqa: E712
+            .count()
+        )
+        if active_admins <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Cannot delete the last active ADMIN_RH",
+            )
+
+    employee = target.employee
+    if employee is not None:
+        assigned_tasks = (
+            db.query(Task).filter(Task.assigned_to == employee.id).count()
+        )
+        if assigned_tasks > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cet employé a des tâches assignées. "
+                    "Veuillez les réassigner avant de le supprimer."
+                ),
+            )
+
+        attendance_ids = [
+            row[0]
+            for row in db.query(Attendance.id)
+            .filter(Attendance.employee_id == employee.id)
+            .all()
+        ]
+        if attendance_ids:
+            db.query(Break).filter(
+                Break.attendance_id.in_(attendance_ids)
+            ).delete(synchronize_session=False)
+            db.query(Attendance).filter(
+                Attendance.id.in_(attendance_ids)
+            ).delete(synchronize_session=False)
+
+    db.delete(target)
+    db.commit()
 
 
 def reset_password(

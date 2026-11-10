@@ -10,8 +10,18 @@ T11: Admin tries to deactivate the last active admin → 409
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
+
+import pytest
+from fastapi import HTTPException
+
 from app.core.security import hash_password, create_access_token
+from app.models.attendance import Attendance
+from app.models.break_ import Break
+from app.models.employee import Employee
+from app.models.task import Task
 from app.models.user import User
+from app.services import user_service
 
 
 def _make_user(db_session, email: str, password: str, role: str, is_active: bool = True) -> User:
@@ -110,3 +120,121 @@ def test_admin_can_change_another_admin_role(client, db_session):
     )
     assert response.status_code == 200
     assert response.json()["role"] == "EMPLOYEE"
+
+
+# ---------------------------------------------------------------------------
+# T14: Admin tries to hard-delete themselves → 403
+# ---------------------------------------------------------------------------
+
+def test_admin_cannot_delete_self(client, db_session):
+    admin = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+    _make_user(db_session, "admin2@logicat.ma", "Admin123!", "ADMIN_RH")
+    token = _make_token(admin)
+
+    response = client.delete(f"/api/users/{admin.id}", headers=_auth_header(token))
+    assert response.status_code == 403
+    assert db_session.get(User, admin.id) is not None
+
+
+# ---------------------------------------------------------------------------
+# T15: Deleting the last active admin → 409 (service-level rule)
+# ---------------------------------------------------------------------------
+
+def test_delete_last_active_admin_blocked(db_session):
+    admin = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+
+    # A different (non-persisted) caller so the self-delete guard does not fire.
+    other_admin = User(
+        id=9999,
+        email="other@logicat.ma",
+        password_hash="x",
+        first_name="Other",
+        last_name="Admin",
+        role="ADMIN_RH",
+        is_active=True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        user_service.delete_user(db_session, admin.id, other_admin)
+    assert exc.value.status_code == 409
+    assert db_session.get(User, admin.id) is not None
+
+
+# ---------------------------------------------------------------------------
+# T16: Deleting an employee who still has tasks → 409
+# ---------------------------------------------------------------------------
+
+def test_cannot_delete_employee_with_tasks(client, db_session):
+    admin = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+    employee_user = _make_user(db_session, "emp@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee = Employee(user_id=employee_user.id, department="IT")
+    db_session.add(employee)
+    db_session.commit()
+    db_session.refresh(employee)
+
+    db_session.add(
+        Task(title="Tâche bloquante", assigned_to=employee.id, created_by=admin.id)
+    )
+    db_session.commit()
+
+    token = _make_token(admin)
+    response = client.delete(
+        f"/api/users/{employee_user.id}", headers=_auth_header(token)
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Cet employé a des tâches assignées. "
+        "Veuillez les réassigner avant de le supprimer."
+    )
+    assert db_session.get(User, employee_user.id) is not None
+
+
+# ---------------------------------------------------------------------------
+# T17: Successful delete removes employee + attendances + breaks
+# ---------------------------------------------------------------------------
+
+def test_delete_employee_cascades_attendance_data(client, db_session):
+    admin = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+    employee_user = _make_user(db_session, "emp@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee = Employee(user_id=employee_user.id, department="IT")
+    db_session.add(employee)
+    db_session.commit()
+    db_session.refresh(employee)
+
+    attendance = Attendance(
+        employee_id=employee.id, date=date(2026, 11, 10), status="PRESENT"
+    )
+    db_session.add(attendance)
+    db_session.commit()
+    db_session.refresh(attendance)
+    db_session.add(
+        Break(
+            attendance_id=attendance.id,
+            type="MORNING",
+            start_time=datetime(2026, 11, 10, 10, 30, tzinfo=timezone.utc),
+            end_time=datetime(2026, 11, 10, 10, 45, tzinfo=timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    user_id = employee_user.id
+    employee_id = employee.id
+    attendance_id = attendance.id
+
+    token = _make_token(admin)
+    response = client.delete(
+        f"/api/users/{user_id}", headers=_auth_header(token)
+    )
+    assert response.status_code == 200
+    assert response.json()["detail"] == "User deleted"
+
+    db_session.expire_all()
+    assert db_session.get(User, user_id) is None
+    assert db_session.get(Employee, employee_id) is None
+    assert db_session.get(Attendance, attendance_id) is None
+    assert (
+        db_session.query(Break)
+        .filter(Break.attendance_id == attendance_id)
+        .count()
+        == 0
+    )

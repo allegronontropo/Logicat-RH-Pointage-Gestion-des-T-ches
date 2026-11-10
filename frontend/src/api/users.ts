@@ -73,3 +73,8 @@ export async function resetPassword(id: number, newPassword: string): Promise<Us
   );
   return data;
 }
+
+export async function deleteUser(id: number): Promise<{ detail: string }> {
+  const { data } = await apiClient.delete<{ detail: string }>(`/api/users/${id}`);
+  return data;
+}

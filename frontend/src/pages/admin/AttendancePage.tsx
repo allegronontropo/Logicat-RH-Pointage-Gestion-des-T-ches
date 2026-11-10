@@ -263,7 +263,7 @@ export default function AttendancePage() {
     return `${hours}h ${mins.toString().padStart(2, "0")}m`;
   }
 
-  // Helper: Format Breaks breakdown "Matin: 15m | Déj: 60m | Soir: 15m"
+  // Helper: Format Breaks with exact times, e.g. "Matin: 10:30 - 10:45"
   function renderBreaks(breaks: BreakSummary[]) {
     if (!breaks || breaks.length === 0) {
       return <span className="text-slate-400 font-mono text-xs">—</span>;
@@ -280,13 +280,12 @@ export default function AttendancePage() {
           : b.type;
 
       if (!b.end_time) {
-        return `${typeLabel}: en cours`;
+        return `${typeLabel}: ${formatDateTime(b.start_time)} - en cours`;
       }
 
-      const start = new Date(b.start_time).getTime();
-      const end = new Date(b.end_time).getTime();
-      const diffMinutes = Math.max(0, Math.round((end - start) / 60000));
-      return `${typeLabel}: ${diffMinutes}m`;
+      return `${typeLabel}: ${formatDateTime(b.start_time)} - ${formatDateTime(
+        b.end_time
+      )}`;
     });
 
     return (
