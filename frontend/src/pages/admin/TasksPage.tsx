@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   CheckSquare,
   Plus,
@@ -62,6 +63,7 @@ import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -113,6 +115,27 @@ export default function TasksPage() {
   });
 
   const employees = users.filter((u) => u.role === "EMPLOYEE");
+
+  // Deep link: /admin/tasks?assigned_to=<employeeId> preselects the employee
+  // filter. Used by the user-deletion flow to reassign blocking tasks.
+  useEffect(() => {
+    const assignedTo = searchParams.get("assigned_to");
+    if (!assignedTo) return;
+
+    // Accept either the employee profile ID (preferred) or the user ID.
+    const match = users.find(
+      (u) =>
+        u.role === "EMPLOYEE" &&
+        (String(u.employee_profile?.id ?? u.employee_id ?? "") === assignedTo ||
+          String(u.id) === assignedTo)
+    );
+    const resolvedId = match
+      ? String(match.employee_profile?.id ?? match.employee_id ?? match.id)
+      : assignedTo;
+
+    setAssigneeFilter(resolvedId);
+    setCurrentPage(1);
+  }, [searchParams, users]);
 
   // Convert employees to EmployeeOption shape for the combobox
   const employeeOptions: EmployeeOption[] = useMemo(
@@ -397,6 +420,8 @@ export default function TasksPage() {
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       await queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Keep the users page in sync: a reassignment can unblock deletion.
+      await queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setFeedback({
         type: "success",
         message: `La tâche a été réassignée avec succès à ${reassignEmployeeName}.`,

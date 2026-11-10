@@ -97,6 +97,7 @@ export default function UsersPage() {
   const [deletingUser, setDeletingUser] = useState<UserDetail | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [needsReassign, setNeedsReassign] = useState(false);
 
   // Form States - Edit User
   const [editForm, setEditForm] = useState<UserUpdatePayload>({
@@ -273,7 +274,24 @@ export default function UsersPage() {
   // ── Open Delete Confirmation ────────────────────────────────────
   function handleOpenDelete(targetUser: UserDetail) {
     setDeleteError(null);
+    setNeedsReassign(false);
     setDeletingUser(targetUser);
+  }
+
+  // ── Redirect to the Tasks page filtered on the blocking employee ─
+  function handleGoReassign() {
+    if (!deletingUser) return;
+
+    // Prefer the employee profile id; fall back to the user id.
+    const employeeId =
+      deletingUser.employee_profile?.id ??
+      deletingUser.employee_id ??
+      deletingUser.id;
+
+    setDeletingUser(null);
+    setDeleteError(null);
+    setNeedsReassign(false);
+    navigate(`/admin/tasks?assigned_to=${employeeId}`);
   }
 
   // ── Confirm Hard Delete ─────────────────────────────────────────
@@ -300,13 +318,17 @@ export default function UsersPage() {
         err as { response?: { data?: { detail?: string } } }
       )?.response?.data?.detail;
 
-      setDeleteError(
-        status === 409
-          ? "Impossible de supprimer : cet employé a des tâches assignées. Veuillez les réassigner d'abord."
-          : typeof detail === "string"
-          ? detail
-          : "Erreur lors de la suppression."
-      );
+      if (status === 409) {
+        // Blocked by assigned tasks: offer the reassignment shortcut.
+        setNeedsReassign(true);
+        setDeleteError(
+          "Impossible de supprimer : cet employé a des tâches assignées. Veuillez les réassigner d'abord."
+        );
+      } else {
+        setDeleteError(
+          typeof detail === "string" ? detail : "Erreur lors de la suppression."
+        );
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -1147,26 +1169,37 @@ export default function UsersPage() {
           )}
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>
+            <AlertDialogCancel disabled={isDeleting || needsReassign}>
               Annuler
             </AlertDialogCancel>
-            <Button
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-              className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Suppression…
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Supprimer définitivement
-                </>
-              )}
-            </Button>
+            {needsReassign ? (
+              <Button
+                onClick={handleGoReassign}
+                disabled={isDeleting}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1.5"
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+                Réassigner les tâches
+              </Button>
+            ) : (
+              <Button
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Suppression…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Supprimer définitivement
+                  </>
+                )}
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
