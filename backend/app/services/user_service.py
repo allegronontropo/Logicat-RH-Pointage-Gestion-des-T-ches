@@ -62,9 +62,14 @@ def create_user(
 
 
 def update_user(
-    db: Session, target_id: int, update_data: UserUpdate
+    db: Session, target_id: int, update_data: UserUpdate, current_user: User
 ) -> User:
-    """Update a user's fields. Only provided fields are changed."""
+    """Update a user's fields. Only provided fields are changed.
+
+    Raises HTTP 400 if an admin tries to change their own role: the JWT still
+    carries the old role, so the change would immediately lock them out of (or
+    silently escalate) admin routes until they log in again.
+    """
     user = db.get(User, target_id)
     if user is None:
         raise HTTPException(
@@ -73,6 +78,16 @@ def update_user(
         )
 
     update_dict = update_data.model_dump(exclude_unset=True)
+
+    # Rule: no self role change (self-demotion / self-promotion).
+    if user.id == current_user.id:
+        new_role = update_dict.get("role")
+        if new_role is not None and new_role != user.role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Vous ne pouvez pas modifier votre propre rôle.",
+            )
+
     for field, value in update_dict.items():
         setattr(user, field, value)
 

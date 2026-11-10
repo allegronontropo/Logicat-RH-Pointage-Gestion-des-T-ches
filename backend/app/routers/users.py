@@ -117,7 +117,7 @@ def update_user_endpoint(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(require_admin)],
 ) -> UserRead:
-    user = user_service.update_user(db, user_id, update_data)
+    user = user_service.update_user(db, user_id, update_data, current_user)
     return UserRead.model_validate(user)
 
 

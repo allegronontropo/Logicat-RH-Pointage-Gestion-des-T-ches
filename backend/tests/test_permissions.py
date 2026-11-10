@@ -73,3 +73,40 @@ def test_admin_cannot_deactivate_last_admin(client, db_session):
         f"/api/users/{admin.id}/deactivate", headers=_auth_header(token)
     )
     assert response.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# T12: Admin tries to change their own role (self-demotion) → 400
+# ---------------------------------------------------------------------------
+
+def test_admin_cannot_change_own_role(client, db_session):
+    admin = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+    token = _make_token(admin)
+    response = client.put(
+        f"/api/users/{admin.id}",
+        json={"role": "EMPLOYEE"},
+        headers=_auth_header(token),
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Vous ne pouvez pas modifier votre propre rôle."
+
+    db_session.refresh(admin)
+    assert admin.role == "ADMIN_RH"
+
+
+# ---------------------------------------------------------------------------
+# T13: Admin can still change another admin's role
+# ---------------------------------------------------------------------------
+
+def test_admin_can_change_another_admin_role(client, db_session):
+    admin1 = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin2 = _make_user(db_session, "admin2@logicat.ma", "Admin123!", "ADMIN_RH")
+    token = _make_token(admin1)
+
+    response = client.put(
+        f"/api/users/{admin2.id}",
+        json={"role": "EMPLOYEE"},
+        headers=_auth_header(token),
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "EMPLOYEE"

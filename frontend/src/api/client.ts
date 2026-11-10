@@ -1,8 +1,10 @@
 /**
  * src/api/client.ts
  * -----------------
- * Axios instance with base URL and 401 interceptor.
+ * Axios instance with base URL and auth error interceptors.
  * On 401: clears localStorage token and redirects to /login.
+ * On 403 while on an /admin page: the token role no longer matches the DB role
+ * (e.g. the account was demoted), so clear the session and redirect to /login.
  */
 
 import axios from "axios";
@@ -32,6 +34,15 @@ apiClient.interceptors.response.use(
       localStorage.removeItem("user");
       // Hard redirect — works outside React context too
       if (window.location.pathname !== "/login") {
+        window.location.href = "/login";
+      }
+    } else if (error.response?.status === 403) {
+      // A 403 on an admin page means the JWT role no longer matches the
+      // database role (e.g. the account was demoted). Keeping the stale
+      // token would leave the admin UI in a broken state — log out instead.
+      if (window.location.pathname.startsWith("/admin")) {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("user");
         window.location.href = "/login";
       }
     }

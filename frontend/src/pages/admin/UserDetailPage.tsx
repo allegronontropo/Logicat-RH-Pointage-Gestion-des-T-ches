@@ -66,11 +66,13 @@ import { listTasks, createTask, type TaskCreatePayload } from "@/api/tasks";
 import { listAllAttendance } from "@/api/attendances";
 import { apiClient } from "@/api/client";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { useAuth } from "@/auth/useAuth";
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const userId = Number(id);
 
   // Notifications & Feedback
@@ -768,7 +770,12 @@ export default function UserDetailPage() {
                   onClick={handleToggleStatus}
                   variant={user.is_active ? "outline" : "default"}
                   size="sm"
-                  disabled={isTogglingStatus}
+                  disabled={isTogglingStatus || user.id === currentUser?.id}
+                  title={
+                    user.id === currentUser?.id
+                      ? "Vous ne pouvez pas désactiver votre propre compte."
+                      : undefined
+                  }
                   className={`flex-1 text-xs font-semibold ${
                     user.is_active
                       ? "text-rose-600 border-rose-200 hover:bg-rose-50"
@@ -1263,17 +1270,23 @@ export default function UserDetailPage() {
                 <select
                   id="edit-role"
                   value={editForm.role}
+                  disabled={user?.id === currentUser?.id}
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
                       role: e.target.value as "ADMIN_RH" | "EMPLOYEE",
                     })
                   }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="EMPLOYEE">Employé</option>
                   <option value="ADMIN_RH">Admin RH</option>
                 </select>
+                {user?.id === currentUser?.id && (
+                  <p className="text-[10px] text-slate-400">
+                    Vous ne pouvez pas modifier votre propre rôle.
+                  </p>
+                )}
               </div>
             </div>
 

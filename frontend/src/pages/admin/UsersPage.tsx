@@ -656,6 +656,7 @@ export default function UsersPage() {
                           {targetUser.is_active ? (
                             <DropdownMenuItem
                               onClick={() => handleToggleActive(targetUser)}
+                              disabled={isCurrent}
                               destructive
                               className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
                             >
@@ -835,17 +836,23 @@ export default function UsersPage() {
                 <select
                   id="edit-role"
                   value={editForm.role}
+                  disabled={editingUser?.id === currentUser?.id}
                   onChange={(e) =>
                     setEditForm({
                       ...editForm,
                       role: e.target.value as "ADMIN_RH" | "EMPLOYEE",
                     })
                   }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary h-9 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                 >
                   <option value="EMPLOYEE">Employé</option>
                   <option value="ADMIN_RH">Admin RH</option>
                 </select>
+                {editingUser?.id === currentUser?.id && (
+                  <p className="text-[10px] text-slate-400">
+                    Vous ne pouvez pas modifier votre propre rôle.
+                  </p>
+                )}
               </div>
             </div>
 
