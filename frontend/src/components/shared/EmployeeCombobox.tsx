@@ -96,8 +96,8 @@ export function EmployeeCombobox({
                 <CommandItem
                   key="all"
                   value={allOptionLabel}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onSelect={() => {
+                  onMouseDown={(e) => {
+                    e.preventDefault();
                     onChange(null);
                     setOpen(false);
                   }}
@@ -120,8 +120,8 @@ export function EmployeeCombobox({
                   <CommandItem
                     key={emp.id}
                     value={searchValue}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onSelect={() => {
+                    onMouseDown={(e) => {
+                      e.preventDefault();
                       onChange(emp.id);
                       setOpen(false);
                     }}
