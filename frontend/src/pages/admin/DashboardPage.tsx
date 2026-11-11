@@ -32,6 +32,7 @@ import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { QuickActionsPanel } from "@/components/dashboard/QuickActionsPanel";
 import { RecentAbsences } from "@/components/dashboard/RecentAbsences";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { CreateUserModal } from "@/components/shared/CreateUserModal";
 import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
@@ -349,35 +350,32 @@ export default function AdminDashboardPage() {
                     </div>
                   );
                 })
-              )}
-            </CardContent>
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-50">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentDeadlinesPage === 1}
-                    onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage - 1)}
-                    className="text-xs px-2 py-1"
-                  >
-                    Précédent
-                  </Button>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    Page {currentDeadlinesPage} / {totalDeadlinesPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentDeadlinesPage === totalDeadlinesPages}
-                    onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage + 1)}
-                    className="text-xs px-2 py-1"
-                  >
-                    Suivant
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+)}
+              </CardContent>
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-50">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentDeadlinesPage === 1}
+                  onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage - 1)}
+                  className="text-xs px-2 py-1"
+                >
+                  Précédent
+                </Button>
+                <span className="text-[10px] text-slate-500 font-medium">
+                  Page {currentDeadlinesPage} / {totalDeadlinesPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentDeadlinesPage === totalDeadlinesPages}
+                  onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage + 1)}
+                  className="text-xs px-2 py-1"
+                >
+                  Suivant
+                </Button>
+              </div>
+            </Card>
       </div>
 
       {/* ── Quick Action Modals ─────────────────────────────── */}
