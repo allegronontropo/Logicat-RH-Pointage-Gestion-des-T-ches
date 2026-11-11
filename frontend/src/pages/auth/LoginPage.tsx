@@ -1,5 +1,5 @@
 /**
- * Enterprise sign-in page.
+ * Responsive LOGICAT sign-in page.
  */
 
 import { useState } from "react";
@@ -7,25 +7,25 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ArrowRight, Lock, Loader2, Mail } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, LoaderCircle, Mail, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const loginSchema = z.object({
-  email: z.string().email("Email invalide"),
-  password: z.string().min(1, "Mot de passe requis"),
+  email: z.string().email("Veuillez saisir une adresse email valide."),
+  password: z.string().min(1, "Veuillez saisir votre mot de passe."),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
-
 const logoSrc = "/images/Logo-logicat-Digital.webp";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading: authLoading } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -36,79 +36,124 @@ export default function LoginPage() {
     defaultValues: { email: "", password: "" },
   });
 
+  const busy = isSubmitting || authLoading;
+
   async function onSubmit(data: LoginFormData) {
     setServerError(null);
     try {
       const user = await login(data.email, data.password);
       navigate(user.role === "ADMIN_RH" ? "/admin/dashboard" : "/employee/dashboard", { replace: true });
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Identifiants invalides. Vérifiez votre email et mot de passe.";
-      setServerError(typeof msg === "string" ? msg : "La connexion a échoué. Veuillez réessayer.");
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      setServerError(typeof detail === "string" ? detail : "Connexion impossible. Vérifiez vos identifiants et réessayez.");
     }
   }
-  const busy = isSubmitting || authLoading;
 
   return (
-    <main className="grid min-h-screen grid-cols-1 bg-white md:grid-cols-2">
+    <main className="login-layout min-h-screen bg-white lg:grid lg:grid-cols-2">
       {/* Desktop brand panel */}
-      <section className="relative hidden overflow-hidden bg-gradient-to-br from-[#123b9a] via-[#1746b3] to-[#0b1e4b] px-12 py-16 text-white md:flex md:flex-col md:items-center md:justify-center">
-        <div aria-hidden="true" className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,.5)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.5)_1px,transparent_1px)] [background-size:48px_48px]" />
-        <div aria-hidden="true" className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-blue-400/10 blur-3xl" />
-        <div aria-hidden="true" className="absolute -bottom-28 -right-20 h-96 w-96 rounded-full bg-indigo-400/10 blur-3xl" />
-        <div className="relative flex max-w-lg flex-col items-center text-center">
-          <div className="mb-7 rounded-2xl bg-white px-6 py-4 shadow-2xl shadow-black/20">
-            <img src={logoSrc} alt="LOGICAT" className="h-auto w-64 object-contain" />
+      <section className="login-brand-panel relative hidden min-h-screen overflow-hidden bg-gradient-to-br from-[#0D2462] via-[#123B9A] to-[#1746B3] px-10 py-10 text-white lg:flex lg:flex-col xl:px-16">
+        <div aria-hidden="true" className="absolute -right-36 -top-32 h-[34rem] w-[34rem] rounded-full border border-white/[0.08]" />
+        <div aria-hidden="true" className="absolute -right-16 -top-12 h-[25rem] w-[25rem] rounded-full border border-white/[0.08]" />
+        <div aria-hidden="true" className="absolute -bottom-48 -left-40 h-[38rem] w-[38rem] rounded-full bg-blue-300/[0.08] blur-3xl" />
+
+        <div className="relative z-10 flex items-center">
+          <div className="rounded-xl bg-white px-4 py-2.5 shadow-lg shadow-blue-950/20">
+            <img src={logoSrc} alt="LOGICAT" className="h-auto w-40 object-contain" />
           </div>
-          <p className="text-lg font-medium text-blue-100">Portail de gestion des ressources humaines</p>
-          <div className="mt-10 h-px w-20 bg-blue-300/50" />
-          <p className="mt-6 text-sm leading-6 text-blue-100/80">Un espace sécurisé pour gérer les présences, les tâches et le suivi des équipes.</p>
         </div>
+
+        <div className="relative z-10 my-auto max-w-xl pb-12">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-blue-100">
+            <ShieldCheck className="h-4 w-4" />
+            Portail RH sécurisé
+          </div>
+          <h1 className="max-w-lg text-4xl font-semibold leading-tight tracking-tight xl:text-5xl">
+            Les équipes et le quotidien, au même endroit.
+          </h1>
+          <p className="mt-5 max-w-md text-base leading-7 text-blue-100/80">
+            Gérez les présences, suivez les tâches et retrouvez les informations de votre équipe dans un espace unique.
+          </p>
+        </div>
+
+        <p className="relative z-10 text-xs text-blue-100/50">LOGICAT GROUP · Portail interne</p>
       </section>
 
-      {/* Sign-in panel */}
-      <section className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10 sm:px-8 md:min-h-0 md:px-12">
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-9">
-          <div className="mb-8 flex justify-center md:hidden">
-            <img src={logoSrc} alt="LOGICAT" className="h-auto w-44 rounded-xl bg-white p-2 shadow-sm" />
+      {/* Sign-in form */}
+      <section className="login-form-panel flex min-h-screen flex-col px-5 py-8 sm:px-10 lg:justify-center lg:px-10 xl:px-16">
+        <div className="login-form-inner mx-auto flex w-full max-w-[26rem] flex-1 flex-col justify-center lg:flex-none">
+          <div className="login-mobile-logo mb-10 flex justify-center lg:hidden">
+            <img src={logoSrc} alt="LOGICAT" className="h-auto w-44 rounded-xl bg-white p-2" />
           </div>
 
-          <header className="mb-7">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Espace sécurisé</p>
-            <h2 className="text-3xl font-bold tracking-tight text-slate-900">Connexion</h2>
-            <p className="mt-2 text-sm text-slate-500">Accédez à votre espace sécurisé.</p>
+          <header className="mb-8">
+            <p className="mb-2 text-sm font-semibold text-blue-700">Bienvenue</p>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Connexion</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Accédez à votre espace sécurisé.</p>
           </header>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium text-slate-700">Adresse email</Label>
               <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input id="email" type="email" placeholder="nom@entreprise.ma" autoComplete="email" className="h-11 pl-10" aria-invalid={!!errors.email} {...register("email")} />
+                <Mail aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="nom@entreprise.ma"
+                  autoComplete="username"
+                  aria-invalid={!!errors.email}
+                  aria-describedby={errors.email ? "email-error" : undefined}
+                  className="h-12 rounded-xl border-slate-200 pl-10 shadow-sm shadow-slate-900/[0.02] placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-500/20"
+                  {...register("email")}
+                />
               </div>
-              {errors.email && <p className="text-xs text-rose-600">{errors.email.message}</p>}
+              {errors.email && <p id="email-error" className="text-xs text-rose-600">{errors.email.message}</p>}
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium text-slate-700">Mot de passe</Label>
               <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input id="password" type="password" placeholder="Votre mot de passe" autoComplete="current-password" className="h-11 pl-10" aria-invalid={!!errors.password} {...register("password")} />
+                <LockKeyhole aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Saisissez votre mot de passe"
+                  autoComplete="current-password"
+                  aria-invalid={!!errors.password}
+                  aria-describedby={errors.password ? "password-error" : undefined}
+                  className="h-12 rounded-xl border-slate-200 pl-10 pr-12 shadow-sm shadow-slate-900/[0.02] placeholder:text-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-500/20"
+                  {...register("password")}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((shown) => !shown)}
+                  className="absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
-              {errors.password && <p className="text-xs text-rose-600">{errors.password.message}</p>}
+              {errors.password && <p id="password-error" className="text-xs text-rose-600">{errors.password.message}</p>}
             </div>
 
-            {serverError && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{serverError}</div>}
+            {serverError && (
+              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-5 text-rose-700">
+                {serverError}
+              </div>
+            )}
 
-            <Button type="submit" disabled={busy} className="h-11 w-full bg-blue-700 font-semibold text-white shadow-sm shadow-blue-900/15 hover:bg-blue-800">
-              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {busy ? "Connexion…" : "Se connecter"}
+            <Button type="submit" disabled={busy} className="login-submit h-12 w-full rounded-xl bg-[#1746B3] text-sm font-semibold text-white shadow-md shadow-blue-900/15 transition hover:bg-[#123B9A] disabled:cursor-not-allowed disabled:opacity-70">
+              {busy ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {busy ? "Connexion en cours…" : "Se connecter"}
               {!busy && <ArrowRight className="ml-auto h-4 w-4" />}
             </Button>
           </form>
 
-          <p className="mt-8 text-center text-xs text-slate-400">LOGICAT GROUP · Portail RH interne · Accès réservé</p>
+          <div className="mt-8 border-t border-slate-100 pt-5 text-center">
+            <p className="text-xs text-slate-400">Accès réservé aux collaborateurs autorisés.</p>
+          </div>
         </div>
       </section>
     </main>

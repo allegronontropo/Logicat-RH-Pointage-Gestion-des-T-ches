@@ -47,3 +47,78 @@
     min-height: 100vh;
   }
 }
+
+/* Keep the login split layout reliable across browsers with older media-query support. */
+.login-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.login-brand-panel {
+  display: none;
+  background: linear-gradient(135deg, #0d2462 0%, #123b9a 55%, #1746b3 100%);
+}
+
+.login-form-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  padding: 2rem 1.25rem;
+  background: #fff;
+}
+
+.login-form-inner {
+  display: flex;
+  width: 100%;
+  max-width: 26rem;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.login-mobile-logo {
+  display: flex;
+}
+
+.login-submit {
+  background-color: #1746b3 !important;
+  color: #fff !important;
+}
+
+.login-submit:hover:not(:disabled) {
+  background-color: #123b9a !important;
+}
+
+@media screen and (min-width: 1024px) {
+  .login-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .login-brand-panel {
+    display: flex;
+    min-height: 100vh;
+    flex-direction: column;
+    padding: 2.5rem clamp(2.5rem, 5vw, 5rem);
+  }
+
+  .login-form-panel {
+    min-height: 100vh;
+    justify-content: center;
+    padding: 3rem clamp(2.5rem, 7vw, 7rem);
+  }
+
+  .login-form-inner {
+    flex: 0 1 26rem;
+  }
+
+  .login-mobile-logo {
+    display: none;
+  }
+}
