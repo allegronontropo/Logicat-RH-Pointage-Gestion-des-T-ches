@@ -10,7 +10,7 @@
  * - Fully responsive (stacks vertically on mobile)
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
@@ -25,6 +25,7 @@ import {
 import { getAdminDashboard } from "@/api/dashboard";
 import { listAllAttendance } from "@/api/attendances";
 import { listTasks } from "@/api/tasks";
+import type { Task } from "@/types";
 import { useAuth } from "@/auth/useAuth";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
@@ -85,19 +86,45 @@ export default function AdminDashboardPage() {
   // Fetch upcoming deadlines from API
   const {
     data: allTasks = [],
-    isLoading: isTasksLoading,
   } = useQuery({
     queryKey: ["admin-tasks"],
     queryFn: () => listTasks(),
   });
 
-  // Filter out DONE tasks, sort by due_date ascending, take first 10
-  const upcomingDeadlines = useMemo(() => {
-    return allTasks
-      .filter((t) => t.status !== "DONE")
-      .sort((a, b) => new Date(a.due_date || "").getTime() - new Date(b.due_date || "").getTime())
-      .slice(0, DEADLINES_PAGE_SIZE);
+  // Pagination & Sort for upcoming deadlines (10 per page)
+  const DEADLINES_PAGE_SIZE = 10;
+  const [currentDeadlinesPage, setCurrentDeadlinesPage] = useState(1);
+  const [deadlineSort, setDeadlineSort] = useState<"asc" | "desc" | null>(null);
+
+  const filteredUpcomingTasks = useMemo(() => {
+    return allTasks.filter((t: Task) => t.status !== "DONE" && Boolean(t.due_date));
   }, [allTasks]);
+
+  const sortedDeadlines = useMemo(() => {
+    const list = [...filteredUpcomingTasks];
+    if (!deadlineSort) {
+      return list.sort(
+        (a, b) => new Date(a.due_date || "").getTime() - new Date(b.due_date || "").getTime()
+      );
+    }
+    return list.sort((a, b) => {
+      const dateA = new Date(a.due_date || "").getTime();
+      const dateB = new Date(b.due_date || "").getTime();
+      return deadlineSort === "asc" ? dateA - dateB : dateB - dateA;
+    });
+  }, [filteredUpcomingTasks, deadlineSort]);
+
+  const totalDeadlinesPages = Math.max(
+    1,
+    Math.ceil(sortedDeadlines.length / DEADLINES_PAGE_SIZE)
+  );
+
+  const upcomingDeadlines = useMemo(() => {
+    return sortedDeadlines.slice(
+      (currentDeadlinesPage - 1) * DEADLINES_PAGE_SIZE,
+      currentDeadlinesPage * DEADLINES_PAGE_SIZE
+    );
+  }, [sortedDeadlines, currentDeadlinesPage]);
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
@@ -304,7 +331,7 @@ export default function AdminDashboardPage() {
                   <p className="text-xs text-slate-400">Aucune échéance à venir.</p>
                 </div>
               ) : (
-                upcomingDeadlines.map((task) => {
+                upcomingDeadlines.map((task: Task) => {
                   const dueDate = new Date(task.due_date!);
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
@@ -350,33 +377,36 @@ export default function AdminDashboardPage() {
                     </div>
                   );
                 })
-)}
+              )}
               </CardContent>
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-50">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentDeadlinesPage === 1}
-                  onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage - 1)}
-                  className="text-xs px-2 py-1"
-                >
-                  Précédent
-                </Button>
-                <span className="text-[10px] text-slate-500 font-medium">
-                  Page {currentDeadlinesPage} / {totalDeadlinesPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={currentDeadlinesPage === totalDeadlinesPages}
-                  onClick={() => setCurrentDeadlinesPage(currentDeadlinesPage + 1)}
-                  className="text-xs px-2 py-1"
-                >
-                  Suivant
-                </Button>
-              </div>
+              {totalDeadlinesPages > 1 && (
+                <div className="flex items-center justify-between gap-2 p-3 pt-2 border-t border-slate-50">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentDeadlinesPage === 1}
+                    onClick={() => setCurrentDeadlinesPage((prev) => Math.max(1, prev - 1))}
+                    className="text-xs px-2 py-1"
+                  >
+                    Précédent
+                  </Button>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Page {currentDeadlinesPage} / {totalDeadlinesPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentDeadlinesPage === totalDeadlinesPages}
+                    onClick={() => setCurrentDeadlinesPage((prev) => Math.min(totalDeadlinesPages, prev + 1))}
+                    className="text-xs px-2 py-1"
+                  >
+                    Suivant
+                  </Button>
+                </div>
+              )}
             </Card>
-      </div>
+          </div>
+        </div>
 
       {/* ── Quick Action Modals ─────────────────────────────── */}
       <CreateUserModal

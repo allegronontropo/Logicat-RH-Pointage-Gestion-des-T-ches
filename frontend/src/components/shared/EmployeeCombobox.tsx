@@ -16,7 +16,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-export function EmployeeCombobox({ employees = [], value, onChange, showAllOption = true, className }: any) {
+export interface EmployeeOption {
+  id: number | string;
+  firstName: string;
+  lastName: string;
+  department?: string | null;
+}
+
+export function EmployeeCombobox({ employees = [], value, onChange, showAllOption = true, className }: {
+  employees?: EmployeeOption[];
+  value?: number | string | null;
+  onChange: (id: any) => void;
+  showAllOption?: boolean;
+  className?: string;
+}) {
   const [open, setOpen] = React.useState(false)
   const selectedEmployee = employees.find((emp: any) => String(emp.id) === String(value))
 

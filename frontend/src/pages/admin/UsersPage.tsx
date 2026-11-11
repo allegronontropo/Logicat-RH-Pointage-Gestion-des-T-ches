@@ -505,7 +505,7 @@ export default function UsersPage() {
               </span>
               <DepartmentCombobox
                 value={departmentFilter}
-                onChange={(dept) => setDepartmentFilter(dept || "ALL")}
+                onChange={(dept: string) => setDepartmentFilter(dept || "ALL")}
                 departments={departments}
                 className="appearance-none rounded-lg border-slate-200 bg-slate-50/70 text-xs font-semibold text-slate-700 min-w-[180px]"
               />
@@ -981,7 +981,7 @@ export default function UsersPage() {
                   <DepartmentCombobox
                     departments={departments}
                     value={editForm.department || "ALL"}
-                    onChange={(dept) => setEditForm({ ...editForm, department: dept || undefined })}
+                    onChange={(dept: string) => setEditForm({ ...editForm, department: dept || undefined })}
                     className="text-xs h-8 bg-slate-50/70"
                   />
                   </div>

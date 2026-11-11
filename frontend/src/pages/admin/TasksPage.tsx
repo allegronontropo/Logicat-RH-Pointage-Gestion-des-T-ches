@@ -610,7 +610,7 @@ export default function TasksPage() {
               </Label>
               <DepartmentCombobox
                 value={departmentFilter}
-                onChange={(dept) => {
+                onChange={(dept: string) => {
                   setDepartmentFilter(dept || "ALL");
                   setAssigneeFilter("ALL");
                 }}
@@ -1139,7 +1139,7 @@ export default function TasksPage() {
                 <EmployeeCombobox
                   value={editForm.assigned_to || 0}
                   onChange={(id) =>
-                    setEditForm({ ...editForm, assigned_to: id })
+                    setEditForm({ ...editForm, assigned_to: Number(id) || 0 })
                   }
                   employees={employeeOptions}
                 />

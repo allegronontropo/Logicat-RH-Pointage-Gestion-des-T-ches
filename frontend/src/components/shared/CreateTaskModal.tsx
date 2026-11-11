@@ -70,7 +70,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
     if (isOpen && form.assigned_to === 0 && employeeOptions.length > 0) {
       setForm((prev) => ({
         ...prev,
-        assigned_to: prev.assigned_to || employeeOptions[0].id,
+        assigned_to: prev.assigned_to || Number(employeeOptions[0].id),
       }));
     }
   }, [isOpen, employeeOptions, form.assigned_to]);

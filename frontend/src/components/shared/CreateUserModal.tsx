@@ -7,7 +7,7 @@
  *   onSuccess – called after a user is created successfully (use to invalidate caches, show toasts, etc.)
  */
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { UserPlus, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
@@ -266,7 +266,7 @@ export function CreateUserModal({ isOpen, onClose, onSuccess, departments: depar
                   <DepartmentCombobox
                     departments={effectiveDepartments}
                     value={form.department || "ALL"}
-                    onChange={(dept) => setForm({ ...form, department: dept || undefined })}
+                    onChange={(dept: string) => setForm({ ...form, department: dept || undefined })}
                     className="text-xs h-8 bg-slate-50/70"
                   />
                 </div>
