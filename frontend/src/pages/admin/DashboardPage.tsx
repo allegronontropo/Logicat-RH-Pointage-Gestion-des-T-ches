@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { getAdminDashboard } from "@/api/dashboard";
 import { listAllAttendance } from "@/api/attendances";
+import { listTasks } from "@/api/tasks";
 import { useAuth } from "@/auth/useAuth";
 import { KpiCard } from "@/components/dashboard/KpiCard";
 import { AttendanceChart } from "@/components/dashboard/AttendanceChart";
@@ -80,51 +81,22 @@ export default function AdminDashboardPage() {
     year: "numeric",
   }).format(new Date());
 
-  // Mock upcoming deadlines (to be wired to real API later)
-  const upcomingTasks = [
-    {
-      id: 1,
-      title: "Réviser les grilles salariales",
-      due_date: new Date().toISOString().split("T")[0],
-      assignee: { first_name: "Sara", last_name: "Bennani" },
-    },
-    {
-      id: 2,
-      title: "Clôture des congés mensuels",
-      due_date: new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      ).toISOString().split("T")[0],
-      assignee: { first_name: "Youssef", last_name: "Amrani" },
-    },
-    {
-      id: 3,
-      title: "Audit des pointages Q4",
-      due_date: new Date(
-        Date.now() + 5 * 24 * 60 * 60 * 1000
-      ).toISOString().split("T")[0],
-      assignee: { first_name: "Kamal", last_name: "Benzarti" },
-    },
-  ];
+  // Fetch upcoming deadlines from API
+  const {
+    data: allTasks = [],
+    isLoading: isTasksLoading,
+  } = useQuery({
+    queryKey: ["admin-tasks"],
+    queryFn: () => listTasks(),
+  });
 
-  // Pagination & Sort for upcoming deadlines (10 per page)
-  const DEADLINES_PAGE_SIZE = 10;
-  const [currentDeadlinesPage, setCurrentDeadlinesPage] = useState(1);
-  const [deadlineSort, setDeadlineSort] = useState<"asc" | "desc" | null>(null);
-
-  const sortedDeadlines = useMemo(() => {
-    if (!deadlineSort) return [...upcomingTasks];
-    return [...upcomingTasks].sort((a, b) => {
-      const dateA = new Date(a.due_date).getTime();
-      const dateB = new Date(b.due_date).getTime();
-      return deadlineSort === "asc" ? dateA - dateB : dateB - dateA;
-    });
-  }, [upcomingTasks, deadlineSort]);
-
-  const totalDeadlinesPages = Math.max(1, Math.ceil(sortedDeadlines.length / DEADLINES_PAGE_SIZE));
-  const paginatedDeadlines = sortedDeadlines.slice(
-    (currentDeadlinesPage - 1) * DEADLINES_PAGE_SIZE,
-    currentDeadlinesPage * DEADLINES_PAGE_SIZE
-  );
+  // Filter out DONE tasks, sort by due_date ascending, take first 10
+  const upcomingDeadlines = useMemo(() => {
+    return allTasks
+      .filter((t) => t.status !== "DONE")
+      .sort((a, b) => new Date(a.due_date || "").getTime() - new Date(b.due_date || "").getTime())
+      .slice(0, DEADLINES_PAGE_SIZE);
+  }, [allTasks]);
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
@@ -326,18 +298,19 @@ export default function AdminDashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
-              {paginatedDeadlines.length === 0 ? (
+              {upcomingDeadlines.length === 0 ? (
                 <div className="text-center py-3">
                   <p className="text-xs text-slate-400">Aucune échéance à venir.</p>
                 </div>
               ) : (
-                paginatedDeadlines.map((task) => {
+                upcomingDeadlines.map((task) => {
                   const dueDate = new Date(task.due_date!);
                   const today = new Date();
                   today.setHours(0, 0, 0, 0);
                   const tomorrow = new Date(today);
                   tomorrow.setDate(tomorrow.getDate() + 1);
-                  const isUrgent = dueDate <= tomorrow;
+                  const isUrgent = dueDate <= today;
+                  const isTodayOrTomorrow = dueDate <= tomorrow && !isUrgent;
 
                   const assigneeName =
                     task.assignee
@@ -362,6 +335,8 @@ export default function AdminDashboardPage() {
                           className={`text-[10px] font-bold ${
                             isUrgent
                               ? "text-rose-600"
+                              : isTodayOrTomorrow
+                              ? "text-amber-600"
                               : "text-slate-400"
                           }`}
                         >
@@ -375,7 +350,7 @@ export default function AdminDashboardPage() {
                   );
                 })
               )}
-              {totalDeadlinesPages > 1 && (
+            </CardContent>
                 <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-50">
                   <Button
                     variant="outline"
