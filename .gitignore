@@ -13,6 +13,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# Keep the frontend's source utility modules in version control.
+!frontend/src/lib/
+!frontend/src/lib/**
 lib64/
 parts/
 sdist/
