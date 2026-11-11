@@ -29,12 +29,13 @@ export function RecentAbsences({
 }: RecentAbsencesProps) {
   const queryClient = useQueryClient();
 
-  // Filter only justified or unjustified absences, take 3 most recent
+  // Filter only justified or unjustified absences, sort descending by date (most recent first), take first 5
   const absences = attendances
     .filter(
       (a) => a.status === "ABSENT_JUSTIFIED" || a.status === "ABSENT_UNJUSTIFIED"
     )
-    .slice(0, 3);
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 5);
 
   // Modal state for justification
   const [selectedAbsence, setSelectedAbsence] = useState<Attendance | null>(null);
@@ -122,7 +123,7 @@ export function RecentAbsences({
                 <CalendarX className="h-5 w-5 stroke-[1.8]" />
               </div>
               <p className="text-xs font-bold text-slate-700">
-                Aucune absence enregistrée
+                Aucune absence récente
               </p>
               <p className="text-[11px] text-slate-400 mt-1 max-w-[200px] mx-auto">
                 Toutes les présences sont normales ou aucune absence n'a été déclarée.

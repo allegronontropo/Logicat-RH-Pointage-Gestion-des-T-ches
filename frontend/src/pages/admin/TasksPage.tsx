@@ -19,6 +19,9 @@ import {
   User,
   Building2,
   UserCheck,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   Table,
@@ -72,8 +75,19 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("ALL");
   const [isLateFilter, setIsLateFilter] = useState<string>("ALL");
+  const [sortColumn, setSortColumn] = useState<"due_date" | "title" | "priority" | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 10;
+
+  function handleSort(column: "due_date" | "title" | "priority") {
+    if (sortColumn === column) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  }
 
   // Notifications
   const [feedback, setFeedback] = useState<{
@@ -248,9 +262,31 @@ export default function TasksPage() {
     return titleMatch || descMatch || assigneeMatch;
   });
 
-  // Sort tasks by department (alphabetical, with 'Sans Département' last), then by id desc
+  // Sort tasks by selected column, or by department (default)
   const sortedTasks = useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
+      if (sortColumn === "due_date") {
+        const hasDateA = Boolean(a.due_date && !isNaN(new Date(a.due_date).getTime()));
+        const hasDateB = Boolean(b.due_date && !isNaN(new Date(b.due_date).getTime()));
+        if (!hasDateA && !hasDateB) return 0;
+        if (!hasDateA) return 1;
+        if (!hasDateB) return -1;
+        const diff = new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime();
+        return sortDirection === "asc" ? diff : -diff;
+      }
+
+      if (sortColumn === "title") {
+        const diff = a.title.localeCompare(b.title, "fr");
+        return sortDirection === "asc" ? diff : -diff;
+      }
+
+      if (sortColumn === "priority") {
+        const pOrder: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+        const diff = (pOrder[a.priority] || 0) - (pOrder[b.priority] || 0);
+        return sortDirection === "asc" ? diff : -diff;
+      }
+
+      // Default: department (alphabetical, with 'Sans Département' last), then by id desc
       const deptA = getTaskDepartment(a);
       const deptB = getTaskDepartment(b);
       if (deptA !== deptB) {
@@ -260,11 +296,20 @@ export default function TasksPage() {
       }
       return b.id - a.id;
     });
-  }, [filteredTasks, deptMap]);
+  }, [filteredTasks, deptMap, sortColumn, sortDirection]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, priorityFilter, statusFilter, departmentFilter, assigneeFilter, isLateFilter]);
+  }, [
+    searchQuery,
+    priorityFilter,
+    statusFilter,
+    departmentFilter,
+    assigneeFilter,
+    isLateFilter,
+    sortColumn,
+    sortDirection,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(sortedTasks.length / PAGE_SIZE));
   const paginatedTasks = sortedTasks.slice(
@@ -444,6 +489,195 @@ export default function TasksPage() {
       setShowConfirmDialog(false);
       setIsReassigning(false);
     }
+  }
+
+  function renderTaskRow(task: Task) {
+    const assigneeName = task.assignee
+      ? `${task.assignee.first_name} ${task.assignee.last_name}`
+      : `Employé #${task.assigned_to}`;
+
+    const initials = task.assignee
+      ? `${task.assignee.first_name[0] || ""}${task.assignee.last_name[0] || ""}`.toUpperCase()
+      : "EM";
+
+    // Priority badges
+    const priorityBadge =
+      task.priority === "HIGH"
+        ? "bg-rose-50 text-rose-700 border-rose-200"
+        : task.priority === "MEDIUM"
+        ? "bg-blue-50 text-blue-700 border-blue-200"
+        : "bg-slate-100 text-slate-700 border-slate-200";
+
+    const priorityLabel =
+      task.priority === "HIGH"
+        ? "Haute"
+        : task.priority === "MEDIUM"
+        ? "Moyenne"
+        : "Basse";
+
+    // Status badges
+    const statusBadge =
+      task.status === "DONE"
+        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+        : task.status === "IN_PROGRESS"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-slate-100 text-slate-700 border-slate-200";
+
+    const statusLabel =
+      task.status === "DONE"
+        ? "Terminé"
+        : task.status === "IN_PROGRESS"
+        ? "En cours"
+        : "À faire";
+
+    // Past due check
+    const isPastDue =
+      task.due_date &&
+      task.status !== "DONE" &&
+      new Date(task.due_date) < new Date(new Date().setHours(0, 0, 0, 0));
+
+    return (
+      <TableRow
+        key={task.id}
+        className="group hover:bg-slate-50/70 transition-colors cursor-pointer"
+        onClick={() => handleOpenEdit(task)}
+      >
+        {/* Titre & Description */}
+        <TableCell>
+          <div className="space-y-0.5 max-w-sm">
+            <p className="text-xs font-bold text-slate-900 truncate group-hover:text-primary transition-colors">
+              {task.title}
+            </p>
+            {task.description && (
+              <p className="text-[11px] text-slate-400 line-clamp-1">
+                {task.description}
+              </p>
+            )}
+          </div>
+        </TableCell>
+
+        {/* Assigné à */}
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-[10px] font-bold text-white shadow-sm">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <span className="text-xs font-semibold text-slate-800 truncate block">
+                {assigneeName}
+              </span>
+              {sortColumn && (
+                <span className="text-[10px] text-slate-400 truncate block">
+                  {getTaskDepartment(task)}
+                </span>
+              )}
+            </div>
+          </div>
+        </TableCell>
+
+        {/* Priorité */}
+        <TableCell>
+          <span
+            className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold border ${priorityBadge}`}
+          >
+            {priorityLabel}
+          </span>
+        </TableCell>
+
+        {/* Échéance */}
+        <TableCell>
+          {task.due_date ? (
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              <span
+                className={
+                  isPastDue ? "text-rose-600 font-bold" : "text-slate-700"
+                }
+              >
+                {formatDate(task.due_date)}
+              </span>
+              {isPastDue && (
+                <span
+                  className="rounded border border-rose-200 bg-rose-50 text-rose-700 text-[9px] px-1 font-bold"
+                  title="Date d'échéance dépassée"
+                >
+                  En retard
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-slate-400 text-xs font-mono">—</span>
+          )}
+        </TableCell>
+
+        {/* Statut */}
+        <TableCell>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase border ${statusBadge}`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                task.status === "DONE"
+                  ? "bg-emerald-500"
+                  : task.status === "IN_PROGRESS"
+                  ? "bg-amber-500"
+                  : "bg-slate-400"
+              }`}
+            />
+            {statusLabel}
+          </span>
+        </TableCell>
+
+        {/* Actions Menu */}
+        <TableCell className="text-right">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">Actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-44"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DropdownMenuLabel>Action Tâche #{task.id}</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                onClick={() => handleOpenEdit(task)}
+                className="gap-2 cursor-pointer"
+              >
+                <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                <span>Modifier</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => handleOpenReassign(task)}
+                className="gap-2 cursor-pointer text-primary hover:text-primary-800"
+              >
+                <User className="h-3.5 w-3.5 text-slate-500" />
+                <span>Réassigner</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem
+                onClick={() => setDeletingTask(task)}
+                destructive
+                className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Supprimer</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
+      </TableRow>
+    );
   }
 
   return (
@@ -678,7 +912,7 @@ export default function TasksPage() {
                 <Label htmlFor="assignee-filter" className="text-xs font-semibold text-slate-700">
                   Assigné à
                 </Label>
-                {(priorityFilter !== "ALL" || statusFilter !== "ALL" || assigneeFilter !== "ALL" || departmentFilter !== "ALL" || isLateFilter !== "ALL" || searchQuery) && (
+                {(priorityFilter !== "ALL" || statusFilter !== "ALL" || assigneeFilter !== "ALL" || departmentFilter !== "ALL" || isLateFilter !== "ALL" || searchQuery || sortColumn !== null) && (
                   <button
                     onClick={() => {
                       setPriorityFilter("ALL");
@@ -687,6 +921,8 @@ export default function TasksPage() {
                       setDepartmentFilter("ALL");
                       setIsLateFilter("ALL");
                       setSearchQuery("");
+                      setSortColumn(null);
+                      setSortDirection("asc");
                     }}
                     className="text-[10px] font-semibold text-primary hover:underline"
                   >
@@ -714,7 +950,23 @@ export default function TasksPage() {
               <TableHead className="w-[340px]">Titre</TableHead>
               <TableHead>Assigné à</TableHead>
               <TableHead>Priorité</TableHead>
-              <TableHead>Échéance</TableHead>
+              <TableHead
+                className="cursor-pointer select-none hover:text-slate-900 transition-colors"
+                onClick={() => handleSort("due_date")}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Échéance</span>
+                  {sortColumn === "due_date" ? (
+                    sortDirection === "asc" ? (
+                      <ChevronUp className="h-4 w-4 text-primary" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-primary" />
+                    )
+                  ) : (
+                    <ChevronsUpDown className="h-3.5 w-3.5 text-slate-400 opacity-60" />
+                  )}
+                </div>
+              </TableHead>
               <TableHead>Statut</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -809,6 +1061,8 @@ export default function TasksPage() {
                   </Button>
                 </TableCell>
               </TableRow>
+            ) : sortColumn ? (
+              paginatedTasks.map((task) => renderTaskRow(task))
             ) : (
               pageGroups.map((group) => (
                 <React.Fragment key={`dept-group-${group.department}`}>
@@ -830,186 +1084,10 @@ export default function TasksPage() {
                   </TableRow>
 
                   {/* Tasks under this department */}
-                  {group.tasks.map((task) => {
-                const assigneeName = task.assignee
-                  ? `${task.assignee.first_name} ${task.assignee.last_name}`
-                  : `Employé #${task.assigned_to}`;
-
-                const initials = task.assignee
-                  ? `${task.assignee.first_name[0] || ""}${task.assignee.last_name[0] || ""}`.toUpperCase()
-                  : "EM";
-
-                // Priority badges
-                const priorityBadge =
-                  task.priority === "HIGH"
-                    ? "bg-rose-50 text-rose-700 border-rose-200"
-                    : task.priority === "MEDIUM"
-                    ? "bg-blue-50 text-blue-700 border-blue-200"
-                    : "bg-slate-100 text-slate-700 border-slate-200";
-
-                const priorityLabel =
-                  task.priority === "HIGH"
-                    ? "Haute"
-                    : task.priority === "MEDIUM"
-                    ? "Moyenne"
-                    : "Basse";
-
-                // Status badges
-                const statusBadge =
-                  task.status === "DONE"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : task.status === "IN_PROGRESS"
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-slate-100 text-slate-700 border-slate-200";
-
-                const statusLabel =
-                  task.status === "DONE"
-                    ? "Terminé"
-                    : task.status === "IN_PROGRESS"
-                    ? "En cours"
-                    : "À faire";
-
-                // Past due check
-                const isPastDue =
-                  task.due_date &&
-                  task.status !== "DONE" &&
-                  new Date(task.due_date) < new Date(new Date().setHours(0, 0, 0, 0));
-
-                return (
-                  <TableRow
-                    key={task.id}
-                    className="group hover:bg-slate-50/70 transition-colors cursor-pointer"
-                    onClick={() => handleOpenEdit(task)}
-                  >
-                    {/* Titre & Description */}
-                    <TableCell>
-                      <div className="space-y-0.5 max-w-sm">
-                        <p className="text-xs font-bold text-slate-900 truncate group-hover:text-primary transition-colors">
-                          {task.title}
-                        </p>
-                        {task.description && (
-                          <p className="text-[11px] text-slate-400 line-clamp-1">
-                            {task.description}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-
-                    {/* Assigné à */}
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-[10px] font-bold text-white shadow-sm">
-                          {initials}
-                        </div>
-                        <span className="text-xs font-semibold text-slate-800 truncate">
-                          {assigneeName}
-                        </span>
-                      </div>
-                    </TableCell>
-
-                    {/* Priorité */}
-                    <TableCell>
-                      <span
-                        className={`inline-block rounded-md px-2 py-0.5 text-[11px] font-bold border ${priorityBadge}`}
-                      >
-                        {priorityLabel}
-                      </span>
-                    </TableCell>
-
-                    {/* Échéance */}
-                    <TableCell>
-                      {task.due_date ? (
-                        <div className="flex items-center gap-1.5 text-xs font-medium">
-                          <span
-                            className={
-                              isPastDue ? "text-rose-600 font-bold" : "text-slate-700"
-                            }
-                          >
-                            {formatDate(task.due_date)}
-                          </span>
-                          {isPastDue && (
-                            <span
-                              className="rounded border border-rose-200 bg-rose-50 text-rose-700 text-[9px] px-1 font-bold"
-                              title="Date d'échéance dépassée"
-                            >
-                              En retard
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 text-xs font-mono">—</span>
-                      )}
-                    </TableCell>
-
-                    {/* Statut */}
-                    <TableCell>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase border ${statusBadge}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            task.status === "DONE"
-                              ? "bg-emerald-500"
-                              : task.status === "IN_PROGRESS"
-                              ? "bg-amber-500"
-                              : "bg-slate-400"
-                          }`}
-                        />
-                        {statusLabel}
-                      </span>
-                    </TableCell>
-
-                    {/* Actions Menu */}
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                            <span className="sr-only">Actions</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenuLabel>Action Tâche #{task.id}</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-
-                          <DropdownMenuItem
-                            onClick={() => handleOpenEdit(task)}
-                            className="gap-2 cursor-pointer"
-                          >
-                            <Pencil className="h-3.5 w-3.5 text-slate-500" />
-                            <span>Modifier</span>
-                          </DropdownMenuItem>
-
-                          <DropdownMenuItem
-                            onClick={() => handleOpenReassign(task)}
-                            className="gap-2 cursor-pointer text-primary hover:text-primary-800"
-                          >
-                            <User className="h-3.5 w-3.5 text-slate-500" />
-                            <span>Réassigner</span>
-                          </DropdownMenuItem>
-
-                          <DropdownMenuItem
-                            onClick={() => setDeletingTask(task)}
-                            destructive
-                            className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Supprimer</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </React.Fragment>
-          ))
-        )}
+                  {group.tasks.map((task) => renderTaskRow(task))}
+                </React.Fragment>
+              ))
+            )}
       </TableBody>
     </Table>
 
