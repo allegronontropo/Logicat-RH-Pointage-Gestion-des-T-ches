@@ -106,14 +106,22 @@ export default function AdminDashboardPage() {
     },
   ];
 
-  // Pagination for upcoming deadlines (10 per page)
+  // Pagination & Sort for upcoming deadlines (10 per page)
   const DEADLINES_PAGE_SIZE = 10;
   const [currentDeadlinesPage, setCurrentDeadlinesPage] = useState(1);
-  const totalDeadlinesPages = Math.max(
-    1,
-    Math.ceil(upcomingTasks.length / DEADLINES_PAGE_SIZE)
-  );
-  const paginatedDeadlines = upcomingTasks.slice(
+  const [deadlineSort, setDeadlineSort] = useState<"asc" | "desc" | null>(null);
+
+  const sortedDeadlines = useMemo(() => {
+    if (!deadlineSort) return [...upcomingTasks];
+    return [...upcomingTasks].sort((a, b) => {
+      const dateA = new Date(a.due_date).getTime();
+      const dateB = new Date(b.due_date).getTime();
+      return deadlineSort === "asc" ? dateA - dateB : dateB - dateA;
+    });
+  }, [upcomingTasks, deadlineSort]);
+
+  const totalDeadlinesPages = Math.max(1, Math.ceil(sortedDeadlines.length / DEADLINES_PAGE_SIZE));
+  const paginatedDeadlines = sortedDeadlines.slice(
     (currentDeadlinesPage - 1) * DEADLINES_PAGE_SIZE,
     currentDeadlinesPage * DEADLINES_PAGE_SIZE
   );
@@ -277,11 +285,45 @@ export default function AdminDashboardPage() {
 
           {/* Échéances à venir (Upcoming Deadlines) */}
           <Card className="border border-slate-200/90 bg-white shadow-sm overflow-hidden">
-            <CardHeader className="px-4 py-3 flex items-center gap-2 border-b border-slate-100">
-              <Clock className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                Échéances à venir
-              </CardTitle>
+            <CardHeader className="px-4 py-3 flex items-center justify-between border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-500" />
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Échéances à venir
+                </CardTitle>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeadlineSort(null)}
+                  className={`text-xs px-2 py-1 ${
+                    deadlineSort === null ? "bg-slate-100 text-slate-900 font-bold" : ""
+                  }`}
+                >
+                  Tous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeadlineSort("asc")}
+                  className={`text-xs px-2 py-1 ${
+                    deadlineSort === "asc" ? "bg-slate-100 text-slate-900 font-bold" : ""
+                  }`}
+                >
+                  ▲
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeadlineSort("desc")}
+                  className={`text-xs px-2 py-1 ${
+                    deadlineSort === "desc" ? "bg-slate-100 text-slate-900 font-bold" : ""
+                  }`}
+                >
+                  ▼
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
               {paginatedDeadlines.length === 0 ? (
