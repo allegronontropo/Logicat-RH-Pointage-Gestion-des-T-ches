@@ -86,8 +86,7 @@ logicat-rh/
 │   └── tests/         # pytest + HTTPX
 ├── frontend/          # React 18 + TypeScript + Vite (Day 3+)
 ├── docker-compose.yml # PostgreSQL 16-alpine only
-├── .env.example
-└── AI_CONTEXT.md      # Concise reference for AI coding sessions
+└── .env.example       # Local environment template
 ```
 
 **Two portals:**
@@ -113,4 +112,4 @@ This avoids incorrect attendance assignments around midnight, including during D
 pytest -q
 ```
 
-See [TESTS.md](./TESTS.md) for the full test matrix (T1–T18).
+Backend tests are in `backend/tests/`. Run `pytest -q` from the `backend/` directory.
