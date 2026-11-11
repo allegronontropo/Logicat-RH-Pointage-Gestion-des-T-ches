@@ -387,7 +387,8 @@ def get_attendance_by_id(
             detail="Attendance not found",
         )
 
-    # IDOR: employees can only see their own attendance
+    # IDOR: employees can only see their own attendance. Unknown roles are
+    # denied explicitly instead of inheriting the administrator access path.
     if current_user.role == "EMPLOYEE":
         employee = (
             db.query(Employee)
@@ -399,5 +400,10 @@ def get_attendance_by_id(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Attendance not found",
             )
+    elif current_user.role != "ADMIN_RH":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or employee access required",
+        )
 
     return AttendanceResponse.from_orm_with_durations(attendance)

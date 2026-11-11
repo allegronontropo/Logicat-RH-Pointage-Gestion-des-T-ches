@@ -35,6 +35,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,10 +75,10 @@ import {
   deleteUser,
   listUsers,
   type UserUpdatePayload,
+  type UserDetail,
 } from "@/api/users";
 import { listTasks, createTask, type TaskCreatePayload } from "@/api/tasks";
 import { listAllAttendance } from "@/api/attendances";
-import { apiClient } from "@/api/client";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { useAuth } from "@/auth/useAuth";
 
@@ -122,8 +124,21 @@ export default function UserDetailPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [needsReassign, setNeedsReassign] = useState(false);
 
-  // Export CSV State
+  // Export State
   const [isExporting, setIsExporting] = useState(false);
+
+  // Helper to format minutes as "1h 30m", "45 min" or "0 min"
+  function formatMinutesToTime(mins: number) {
+    if (!mins || mins <= 0) return "0 min";
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m} min`;
+  }
+
+  // Timeframe toggle: 'daily' | 'monthly'
+  const [timeframe, setTimeframe] = useState<'daily' | 'monthly'>('daily');
 
   // Quick Assign Task State
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
@@ -168,7 +183,44 @@ export default function UserDetailPage() {
     queryKey: ["admin-user-attendances", employeeId],
     queryFn: () => listAllAttendance({ employee_id: employeeId! }),
     enabled: Boolean(employeeId),
+    refetchInterval: 60_000,
   });
+
+  // 3b. Fetch Monthly Attendances for current month
+  const now = new Date();
+  const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const { data: monthlyAttendances = [], isLoading: isMonthlyLoading } = useQuery({
+    queryKey: ["admin-user-attendances-monthly", employeeId, monthParam],
+    queryFn: () =>
+      listAllAttendance({
+        employee_id: employeeId!,
+        date_from: `${monthParam}-01`,
+        date_to: `${monthParam}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`,
+      }),
+    enabled: Boolean(employeeId) && timeframe === "monthly",
+    refetchInterval: 60_000,
+  });
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const reportAttendances = useMemo(() => {
+    if (timeframe === "monthly") return monthlyAttendances;
+    const todayAttendance = attendances.find((attendance) => attendance.date === todayStr);
+    return todayAttendance ? [todayAttendance] : [];
+  }, [attendances, monthlyAttendances, timeframe, todayStr]);
+
+  const reportBreaks = useMemo(
+    () => reportAttendances.flatMap((attendance) =>
+      (attendance.breaks || []).map((breakItem) => {
+        const start = new Date(breakItem.start_time).getTime();
+        const end = breakItem.end_time ? new Date(breakItem.end_time).getTime() : Date.now();
+        const durationMinutes = Number.isFinite(start) && Number.isFinite(end)
+          ? Math.max(0, Math.floor((end - start) / 60000))
+          : 0;
+        return { ...breakItem, date: attendance.date, durationMinutes };
+      })
+    ).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    [reportAttendances]
+  );
 
   // 4. Fetch all employees for task assignment dropdown
   const { data: allUsers = [] } = useQuery({
@@ -187,124 +239,113 @@ export default function UserDetailPage() {
 
   // Time Breakdown Calculation
   const timeBreakdown = useMemo(() => {
-    let totalEffective = 0;
-    let totalLunch = 0;
-    let totalMorningAfternoon = 0;
+    const isLoading = timeframe === "monthly" ? isMonthlyLoading : isAttendancesLoading;
 
-    attendances.forEach((att) => {
-      totalEffective += att.effective_minutes || 0;
+    let rawEffectiveMinutes = 0;
+    let rawLunchMinutes = 0;
+    let rawOtherMinutes = 0;
+
+    reportAttendances.forEach((att) => {
+      rawEffectiveMinutes += att.effective_minutes || 0;
       (att.breaks || []).forEach((b) => {
-        if (b.start_time && b.end_time) {
+        if (b.start_time) {
           const start = new Date(b.start_time).getTime();
-          const end = new Date(b.end_time).getTime();
-          const mins = Math.max(0, Math.round((end - start) / 60000));
+          const end = b.end_time ? new Date(b.end_time).getTime() : Date.now();
+          if (!Number.isFinite(start) || !Number.isFinite(end)) return;
+          const mins = Math.max(0, Math.floor((end - start) / 60000));
           if (b.type === "LUNCH") {
-            totalLunch += mins;
+            rawLunchMinutes += mins;
           } else {
-            totalMorningAfternoon += mins;
+            rawOtherMinutes += mins;
           }
         }
       });
     });
 
-    const total = totalEffective + totalLunch + totalMorningAfternoon;
+    const effective = Math.max(0, rawEffectiveMinutes);
+    const lunch = Math.max(0, rawLunchMinutes);
+    const other = Math.max(0, rawOtherMinutes);
 
-    const formatMins = (m: number) => {
-      const h = Math.floor(m / 60);
-      const rem = m % 60;
-      return `${h}h ${rem < 10 ? "0" : ""}${rem}m`;
-    };
+    const totalTime = effective + lunch + other;
 
-    if (total === 0) {
-      return [
-        {
-          name: "Travail Effectif",
-          value: 80,
-          displayValue: "80%",
-          durationText: "80% (estimation)",
-          color: "#10b981",
-        },
-        {
-          name: "Pause Déjeuner",
-          value: 15,
-          displayValue: "15%",
-          durationText: "15% (estimation)",
-          color: "#f59e0b",
-        },
-        {
-          name: "Pauses Matin/Soir",
-          value: 5,
-          displayValue: "5%",
-          durationText: "5% (estimation)",
-          color: "#3b82f6",
-        },
-      ];
+    if (isLoading) {
+      return [];
     }
 
-    const effPercent = Math.max(1, Math.round((totalEffective / total) * 100));
-    const lunchPercent = Math.round((totalLunch / total) * 100);
-    const otherPercent = Math.max(0, 100 - effPercent - lunchPercent);
-
-    return [
-      {
-        name: "Travail Effectif",
-        value: effPercent,
-        displayValue: `${effPercent}% (${formatMins(totalEffective)})`,
-        durationText: formatMins(totalEffective),
-        color: "#10b981",
-      },
-      {
-        name: "Pause Déjeuner",
-        value: lunchPercent,
-        displayValue: `${lunchPercent}% (${formatMins(totalLunch)})`,
-        durationText: formatMins(totalLunch),
-        color: "#f59e0b",
-      },
-      {
-        name: "Pauses Matin/Soir",
-        value: otherPercent,
-        displayValue: `${otherPercent}% (${formatMins(totalMorningAfternoon)})`,
-        durationText: formatMins(totalMorningAfternoon),
-        color: "#3b82f6",
-      },
+    const chartData = [
+      { name: "Travail Effectif", value: effective, color: "#10b981" },
+      { name: "Pause Déjeuner", value: lunch, color: "#f59e0b" },
+      { name: "Pauses Matin/Soir", value: other, color: "#3b82f6" },
     ];
-  }, [attendances]);
 
-  // ── CSV Download Logic ───────────────────────────────────────────
-  async function handleExportCSV() {
-    const targetId = employeeId || user?.employee_id || userId;
-    if (!targetId) return;
+    let accumulated = 0;
+    return chartData.map((item, index) => {
+      const percent = totalTime === 0
+        ? 0
+        : index === chartData.length - 1
+          ? Math.max(0, 100 - accumulated)
+          : Math.min(100 - accumulated, Math.round((item.value / totalTime) * 100));
+      if (index < chartData.length - 1) accumulated += percent;
+      return {
+        ...item,
+        percent,
+        displayValue: `${percent}% (${formatMinutesToTime(item.value)})`,
+        durationText: formatMinutesToTime(item.value),
+      };
+    });
+  }, [reportAttendances, timeframe, isAttendancesLoading, isMonthlyLoading]);
+
+  const timeBreakdownTotal = timeBreakdown.reduce((total, item) => total + item.value, 0);
+
+  // ── PDF Export Logic ───────────────────────────────────────────
+  async function handleExportPDF() {
+    if (!user) return;
+
+    const container = document.getElementById("pdf-report-container");
+    if (!container) return;
 
     setIsExporting(true);
     try {
-      const response = await apiClient.get(
-        `/api/attendances/export/${targetId}`,
-        {
-          responseType: "blob",
-        }
-      );
-      const blob = new Blob([response.data], {
-        type: "text/csv;charset=utf-8;",
+      // Temporarily show the container
+      container.classList.remove("hidden");
+
+      // Wait for render
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const canvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
       });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      const safeName = `${user?.first_name || "employe"}_${user?.last_name || targetId}`
-        .toLowerCase()
-        .replace(/\s+/g, "_");
-      link.setAttribute("download", `attendance_${safeName}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+
+      // Hide again
+      container.classList.add("hidden");
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgWidth = pdfWidth - 20;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+
+      const safeName = `${user.first_name}_${user.last_name}`.toLowerCase().replace(/\s+/g, "_");
+      pdf.save(`repartition_temps_${safeName}.pdf`);
+
       setFeedback({
         type: "success",
-        message: "Fichier CSV des pointages téléchargé avec succès.",
+        message: "Rapport PDF généré avec succès.",
       });
     } catch (err: unknown) {
+      container.classList.add("hidden");
       setFeedback({
         type: "error",
-        message: "Erreur lors de l'exportation du fichier CSV.",
+        message: "Erreur lors de la génération du PDF.",
       });
     } finally {
       setIsExporting(false);
@@ -648,7 +689,7 @@ export default function UserDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleExportCSV}
+                onClick={handleExportPDF}
                 disabled={isExporting}
                 className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 gap-1.5 shadow-2xs"
               >
@@ -657,7 +698,7 @@ export default function UserDetailPage() {
                 ) : (
                   <Download className="h-3.5 w-3.5 text-slate-500" />
                 )}
-                <span>Exporter CSV</span>
+                <span>Exporter PDF</span>
               </Button>
 
               <Button
@@ -1089,61 +1130,102 @@ export default function UserDetailPage() {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleExportCSV}
-                    disabled={isExporting}
-                    className="h-8 px-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
-                  >
-                    <Download className="h-3.5 w-3.5 text-slate-500" />
-                    <span>Exporter CSV</span>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {/* Daily/Monthly Toggle */}
+                    <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5" role="group" aria-label="Période">
+                      <button
+                        onClick={() => setTimeframe("daily")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+                          timeframe === "daily"
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                        aria-pressed={timeframe === "daily"}
+                      >
+                        Vue du Jour
+                      </button>
+                      <button
+                        onClick={() => setTimeframe("monthly")}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+                          timeframe === "monthly"
+                            ? "bg-white text-slate-900 shadow-sm"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                        aria-pressed={timeframe === "monthly"}
+                      >
+                        Vue du Mois
+                      </button>
+                    </div>
+                    {/* PDF Export Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleExportPDF}
+                      disabled={isExporting}
+                      className="h-8 px-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
+                    >
+                      <Download className="h-3.5 w-3.5 text-slate-500" />
+                      <span>Exporter PDF</span>
+                    </Button>
+                  </div>
                 </CardHeader>
 
                 <CardContent className="pt-6 pb-6">
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                     {/* Donut Chart */}
                     <div className="md:col-span-6 flex items-center justify-center h-[220px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={timeBreakdown}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={75}
-                            paddingAngle={4}
-                            dataKey="value"
-                          >
-                            {timeBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value: any, name: any, item: any) => [
-                              item.payload.displayValue || `${value}%`,
-                              name,
-                            ]}
-                            contentStyle={{
-                              backgroundColor: "#0f172a",
-                              color: "#fff",
-                              borderRadius: "8px",
-                              fontSize: "12px",
-                              border: "none",
-                              padding: "8px 12px",
-                            }}
-                            itemStyle={{ color: "#fff" }}
-                          />
-                          <Legend
-                            verticalAlign="bottom"
-                            height={32}
-                            iconType="circle"
-                            iconSize={8}
-                            wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      {timeBreakdownTotal > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={timeBreakdown}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={75}
+                              paddingAngle={4}
+                              dataKey="value"
+                            >
+                              {timeBreakdown.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: any, name: any, item: any) => [
+                                item.payload.displayValue || `${item.payload.percent || value}%`,
+                                name,
+                              ]}
+                              contentStyle={{
+                                backgroundColor: "#0f172a",
+                                color: "#fff",
+                                borderRadius: "8px",
+                                fontSize: "12px",
+                                border: "none",
+                                padding: "8px 12px",
+                              }}
+                              itemStyle={{ color: "#fff" }}
+                            />
+                            <Legend
+                              verticalAlign="bottom"
+                              height={32}
+                              iconType="circle"
+                              iconSize={8}
+                              wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }}
+                              formatter={(value, entry: any) => {
+                                return (
+                                  <span className="text-xs font-medium text-slate-700">
+                                    {value} ({entry.payload.percent}%)
+                                  </span>
+                                );
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="text-center text-xs text-slate-400 py-12">
+                          Aucune donnée de temps disponible pour cette journée.
+                        </div>
+                      )}
                     </div>
 
                     {/* Time Breakdown Metrics Details */}
@@ -1164,13 +1246,11 @@ export default function UserDetailPage() {
                           </div>
                           <div className="text-right">
                             <span className="text-xs font-bold text-slate-900">
-                              {item.value}%
+                              {item.percent}%
                             </span>
-                            {item.durationText && (
-                              <span className="text-[10px] text-slate-400 block font-medium">
-                                {item.durationText}
-                              </span>
-                            )}
+                            <span className="text-[10px] text-slate-400 block font-medium">
+                              {item.durationText}
+                            </span>
                           </div>
                         </div>
                       ))}
@@ -1191,7 +1271,7 @@ export default function UserDetailPage() {
                     </p>
                   </div>
                   <Link
-                    to="/admin/attendance"
+                    to={`/admin/users/${userId}/history`}
                     className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-blue-800 transition"
                   >
                     <span>Voir tout dans Pointages</span>
@@ -1242,12 +1322,13 @@ export default function UserDetailPage() {
                         </TableRow>
                       ) : (
                         recentAttendances.map((item) => {
-                          const hours = Math.floor(item.effective_minutes / 60);
-                          const mins = item.effective_minutes % 60;
+                          const effectiveMinutes = Math.max(0, item.effective_minutes || 0);
+                          const hours = Math.floor(effectiveMinutes / 60);
+                          const mins = effectiveMinutes % 60;
                           const effectiveStr =
-                            item.effective_minutes > 0
+                            effectiveMinutes > 0
                               ? `${hours}h ${mins.toString().padStart(2, "0")}m`
-                              : "—";
+                              : "0 min";
 
                           const statusBadge =
                             item.status === "PRESENT"
@@ -1843,6 +1924,126 @@ export default function UserDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Hidden PDF Report Container ── */}
+      <div id="pdf-report-container" className="hidden bg-white p-8">
+        <div style={{ maxWidth: "800px", margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
+          {/* Header */}
+          <div className="mb-8 pb-4 border-b-2 border-slate-200">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary">
+                <PieChartIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Répartition du temps</h1>
+                <p className="text-sm text-slate-500">
+                  {user?.first_name} {user?.last_name} • {user?.department || "Sans département"}
+                </p>
+              </div>
+            </div>
+            <div className="text-xs text-slate-400">
+              Période : {timeframe === "daily" ? "Aujourd'hui" : `Mois en cours (${monthParam})`}
+              • Généré le {new Date().toLocaleDateString("fr-FR")}
+            </div>
+          </div>
+
+          {/* Summary Table */}
+          <table className="w-full border-collapse mb-8" style={{ fontSize: "11px" }}>
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="text-left p-3 font-semibold text-slate-700">Catégorie</th>
+                <th className="text-right p-3 font-semibold text-slate-700">Pourcentage</th>
+                <th className="text-right p-3 font-semibold text-slate-700">Durée</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeBreakdown.map((item) => (
+                <tr key={item.name} className="border-b border-slate-100">
+                  <td className="p-3 text-slate-800 flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    {item.name}
+                  </td>
+                  <td className="p-3 text-right font-semibold text-slate-900">{item.percent ?? item.value}%</td>
+                  <td className="p-3 text-right text-slate-600">{item.durationText}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {timeframe === "daily" && (
+            <section className="mb-8">
+              <h2 className="mb-3 text-sm font-bold text-slate-800">Détail des pauses</h2>
+              {reportBreaks.length > 0 ? (
+                <table className="w-full border-collapse" style={{ fontSize: "11px" }}>
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="p-2 text-left font-semibold text-slate-700">Pause</th>
+                      <th className="p-2 text-left font-semibold text-slate-700">Début</th>
+                      <th className="p-2 text-left font-semibold text-slate-700">Fin</th>
+                      <th className="p-2 text-right font-semibold text-slate-700">Durée</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportBreaks.map((breakItem) => (
+                      <tr key={breakItem.id} className="border-b border-slate-100">
+                        <td className="p-2 text-slate-800">
+                          {breakItem.type === "MORNING" ? "Pause Matin" : breakItem.type === "LUNCH" ? "Pause Déjeuner" : breakItem.type === "EVENING" ? "Pause Soir" : breakItem.type}
+                        </td>
+                        <td className="p-2 font-mono text-slate-700">{formatDateTime(breakItem.start_time)}</td>
+                        <td className="p-2 font-mono text-slate-700">
+                          {breakItem.end_time ? formatDateTime(breakItem.end_time) : "En cours"}
+                        </td>
+                        <td className="p-2 text-right text-slate-600">
+                          {formatMinutesToTime(breakItem.durationMinutes)}{breakItem.end_time ? "" : " (en cours)"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="py-3 text-xs text-slate-500">Aucune pause enregistrée pour cette journée.</p>
+              )}
+            </section>
+          )}
+
+          {/* Chart */}
+          <div className="flex justify-center">
+            {timeBreakdownTotal > 0 ? (
+              <ResponsiveContainer width={600} height={300}>
+                <PieChart>
+                  <Pie
+                    data={timeBreakdown}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {timeBreakdown.map((entry, index) => (
+                      <Cell key={`pdf-cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Legend
+                    verticalAlign="bottom"
+                    height={36}
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: "11px" }}
+                    formatter={(value, entry: any) => {
+                      return `${value} (${entry.payload.percent ?? 0}%)`;
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="py-12 text-xs text-slate-400">
+                Aucune donnée de temps disponible pour cette journée.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

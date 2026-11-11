@@ -321,22 +321,35 @@ def justify_absence(
 def calculate_durations(
     attendance: Attendance,
 ) -> tuple[int, int, int]:
-    """Return (presence_minutes, break_minutes, effective_minutes).
+    """Return (presence_minutes, break_minutes, effective_minutes), including live time.
 
     Math check: 09:00 to 18:00 = 540 minutes. Breaks 15+60+15 = 90 minutes.
     Effective = 450 minutes (7.5 hours).
     """
-    presence_minutes = 0
+    if not attendance.check_in:
+        return 0, 0, 0
+
+    now = datetime.now(timezone.utc)
+
+    def as_utc(value: datetime) -> datetime:
+        # Some database drivers return naive values for timezone-aware columns;
+        # treat those stored timestamps as UTC before subtracting.
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+    presence_end = attendance.check_out or now
+    presence_minutes = max(
+        0,
+        int((as_utc(presence_end) - as_utc(attendance.check_in)).total_seconds() / 60),
+    )
     break_minutes = 0
 
-    if attendance.check_in and attendance.check_out:
-        delta = attendance.check_out - attendance.check_in
-        presence_minutes = int(delta.total_seconds() / 60)
-
     for br in (attendance.breaks or []):
-        if br.start_time and br.end_time:
-            delta = br.end_time - br.start_time
-            break_minutes += int(delta.total_seconds() / 60)
+        if br.start_time:
+            break_end = br.end_time or now
+            duration = int((as_utc(break_end) - as_utc(br.start_time)).total_seconds() / 60)
+            break_minutes += max(0, duration)
 
-    effective_minutes = presence_minutes - break_minutes
+    effective_minutes = max(0, presence_minutes - break_minutes)
     return presence_minutes, break_minutes, effective_minutes

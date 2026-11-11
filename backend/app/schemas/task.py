@@ -27,6 +27,7 @@ class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     priority: str | None = Field(default=None, description="LOW | MEDIUM | HIGH")
+    status: str | None = Field(default=None, description="TODO | IN_PROGRESS | DONE")
     due_date: date | None = None
     assigned_to: int | None = None
 

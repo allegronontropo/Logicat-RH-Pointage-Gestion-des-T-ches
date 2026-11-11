@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams, Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Clock,
   CalendarX,
@@ -18,7 +18,6 @@ import {
   ChevronsUpDown,
   BarChart3,
   PieChart as PieChartIcon,
-  ArrowRight,
 } from "lucide-react";
 import {
   Table,
@@ -162,11 +161,14 @@ export default function AttendancePage() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Helper to format minutes as "450h 30m"
+  // Helper to format minutes as "450h 30m" or "0 min"
   function formatTotalMinutes(mins: number): string {
+    if (!mins || mins <= 0) return "0 min";
     const h = Math.floor(mins / 60);
     const m = mins % 60;
-    return h > 0 ? `${h}h ${m}m` : `${m} min`;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m} min`;
   }
 
   // ── PDF Export Rate Limiting (localStorage) ──────────────────────
@@ -281,6 +283,7 @@ export default function AttendancePage() {
           selectedDepartment !== "ALL" ? selectedDepartment : undefined,
         date: selectedDate ? selectedDate : undefined,
       }),
+    refetchInterval: 60_000,
   });
 
   // Client-side status filter if specified
@@ -376,11 +379,40 @@ export default function AttendancePage() {
     });
   }
 
+  function formatBreakTime(isoStr: string | null): string {
+    if (!isoStr) return "En cours";
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return "—";
+    return d.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
+  function getBreakTypeLabel(type: string): string {
+    if (type === "MORNING") return "Matin";
+    if (type === "LUNCH") return "Déj";
+    if (type === "EVENING") return "Soir";
+    return type;
+  }
+
+  function getBreakDurationMinutes(startTime: string, endTime: string | null): number {
+    const start = new Date(startTime).getTime();
+    const end = endTime ? new Date(endTime).getTime() : Date.now();
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+    return Math.max(0, Math.floor((end - start) / 60000));
+  }
+
   // Helper: Format duration in minutes into "Xh Ym" (e.g., 9h 00m)
   function formatDurationHM(minutes?: number | null, isAvailable: boolean = true): string {
     if (!isAvailable || minutes === null || minutes === undefined) {
       return "—";
     }
+    // Durations can come from a stale API process or legacy data. Never show
+    // a negative duration in the attendance table.
+    minutes = Math.max(0, minutes);
+    if (minutes === 0) return "0 min";
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${hours}h ${mins.toString().padStart(2, "0")}m`;
@@ -544,7 +576,7 @@ export default function AttendancePage() {
       let totalMorningAfternoon = 0;
 
       globalAttendances.forEach((att) => {
-        totalEffective += att.effective_minutes || 0;
+        totalEffective += Math.max(0, att.effective_minutes || 0);
         (att.breaks || []).forEach((b) => {
           if (b.start_time && b.end_time) {
             const start = new Date(b.start_time).getTime();
@@ -559,10 +591,14 @@ export default function AttendancePage() {
         });
       });
 
+      const effective = Math.max(0, totalEffective);
+      const lunch = Math.max(0, totalLunch);
+      const other = Math.max(0, totalMorningAfternoon);
+
       setGlobalReportData({
-        totalEffective,
-        totalLunch,
-        totalMorningAfternoon,
+        totalEffective: effective,
+        totalLunch: lunch,
+        totalMorningAfternoon: other,
         attendanceCount: globalAttendances.length,
       });
     } else if (!isGlobalReportLoading) {
@@ -880,7 +916,7 @@ export default function AttendancePage() {
               </TableHead>
 
               {/* 4. Pauses (Matin / Déj / Soir) */}
-              <TableHead className="min-w-[190px] font-semibold text-slate-800 whitespace-nowrap">
+              <TableHead className="min-w-[260px] font-semibold text-slate-800 whitespace-nowrap">
                 Pauses (Matin / Déj / Soir)
               </TableHead>
 
@@ -1056,9 +1092,18 @@ export default function AttendancePage() {
                     .substring(0, 2)
                     .toUpperCase() || "EM";
 
+                const targetUser = users.find(
+                  (user) =>
+                    (user.employee_id || user.employee_profile?.id) ===
+                    item.employee_id
+                );
+                const correctUserId = targetUser ? targetUser.id : item.employee_id;
+
                 const isPresent = item.status === "PRESENT";
                 const isJustified = item.status === "ABSENT_JUSTIFIED";
                 const isUnjustified = item.status === "ABSENT_UNJUSTIFIED";
+                const activeBreak = item.breaks?.find((breakItem) => breakItem.end_time === null);
+                const isCurrentlyOnBreak = isPresent && Boolean(activeBreak);
                 const hasCheckIn = Boolean(item.check_in);
 
                 return (
@@ -1068,19 +1113,22 @@ export default function AttendancePage() {
                   >
                     {/* Employé */}
                     <TableCell className="py-2">
-                      <div className="flex items-center gap-3">
+                      <Link
+                        to={`/admin/users/${correctUserId}`}
+                        className="flex items-center gap-3 group hover:bg-slate-100 p-1.5 -m-1.5 rounded-lg transition-colors"
+                      >
                         <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-sm">
                           {initials}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">
+                          <p className="text-xs font-bold text-slate-900 truncate group-hover:text-primary group-hover:underline">
                             {employeeName}
                           </p>
                           <p className="text-[11px] text-slate-400 truncate">
                             {dept}
                           </p>
                         </div>
-                      </div>
+                      </Link>
                     </TableCell>
 
                     {/* Date */}
@@ -1105,33 +1153,23 @@ export default function AttendancePage() {
                     </TableCell>
 
                     {/* Pauses (Matin / Déj / Soir) */}
-                    <TableCell className="py-2">
+                    <TableCell className="min-w-[260px] py-2">
                       {item.breaks && item.breaks.length > 0 ? (
-                        <>
-                          {/*
-                            Map employee_id to the correct user_id for the profile link.
-                            The route /admin/users/:id expects a user ID, not an employee ID.
-                          */}
-                          {(() => {
-                            const targetUser = users.find(
-                              (u) =>
-                                (u.employee_id || u.employee_profile?.id) ===
-                                item.employee_id
-                            );
-                            const correctUserId = targetUser
-                              ? targetUser.id
-                              : item.employee_id;
-                            return (
-                              <Link
-                                to={`/admin/users/${correctUserId}`}
-                                className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 hover:bg-blue-100 hover:text-blue-700 transition-colors cursor-pointer"
-                              >
-                                {item.breaks.length} pause{item.breaks.length > 1 ? "s" : ""}
-                                <ArrowRight className="h-3 w-3 text-slate-500" />
-                              </Link>
-                            );
-                          })()}
-                        </>
+                        <div className="flex flex-col gap-0.5 text-xs leading-tight">
+                          {item.breaks.map((breakItem) => (
+                            <div key={breakItem.id} className="whitespace-nowrap">
+                              <span className="font-medium text-slate-700">
+                                {getBreakTypeLabel(breakItem.type)}:
+                              </span>{" "}
+                              <span className="font-mono text-slate-800">
+                                {formatBreakTime(breakItem.start_time)} - {formatBreakTime(breakItem.end_time)}
+                              </span>{" "}
+                              <span className="text-slate-500">
+                                ({getBreakDurationMinutes(breakItem.start_time, breakItem.end_time)}m)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}
@@ -1156,7 +1194,12 @@ export default function AttendancePage() {
 
                     {/* Statut */}
                     <TableCell className="py-2">
-                      {isPresent ? (
+                      {isCurrentlyOnBreak ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase text-amber-700 border border-amber-200/80">
+                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          EN PAUSE
+                        </span>
+                      ) : isPresent ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold tracking-wide uppercase text-emerald-700 border border-emerald-200/80">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                           PRÉSENT
@@ -1699,188 +1742,178 @@ export default function AttendancePage() {
             </Button>
 
             {/* Report Content */}
-            {globalReportData && (
-              <div className="space-y-6">
-                {/* Summary Cards */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-emerald-700">
-                        Travail Effectif
-                      </span>
-                      <PieChartIcon className="h-4 w-4 text-emerald-500" />
+            {globalReportData && (() => {
+              const effective = Math.max(0, globalReportData.totalEffective);
+              const lunch = Math.max(0, globalReportData.totalLunch);
+              const other = Math.max(0, globalReportData.totalMorningAfternoon);
+              const rawChartData = [
+                { name: "Travail Effectif", value: effective, color: "#10b981" },
+                { name: "Pause Déjeuner", value: lunch, color: "#f59e0b" },
+                { name: "Pauses Matin/Soir", value: other, color: "#3b82f6" },
+              ].filter((item) => item.value > 0);
+              const totalTime = rawChartData.reduce((acc, curr) => acc + curr.value, 0);
+
+              let accumulated = 0;
+              const chartData = rawChartData.map((item, index) => {
+                let percent: number;
+                if (index === rawChartData.length - 1) {
+                  percent = Math.max(0, 100 - accumulated);
+                } else {
+                  percent = totalTime > 0
+                    ? Math.min(100 - accumulated, Math.round((item.value / totalTime) * 100))
+                    : 0;
+                  accumulated += percent;
+                }
+                return {
+                  ...item,
+                  percent,
+                };
+              });
+
+              return (
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-emerald-700">
+                          Travail Effectif
+                        </span>
+                        <PieChartIcon className="h-4 w-4 text-emerald-500" />
+                      </div>
+                      <p className="text-2xl font-extrabold text-emerald-900 mt-1">
+                        {formatTotalMinutes(effective)}
+                      </p>
                     </div>
-                    <p className="text-2xl font-extrabold text-emerald-900 mt-1">
-                      {formatTotalMinutes(globalReportData.totalEffective)}
-                    </p>
+
+                    <div className="rounded-xl bg-amber-50 p-4 border border-amber-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-amber-700">
+                          Pause Déjeuner
+                        </span>
+                        <PieChartIcon className="h-4 w-4 text-amber-500" />
+                      </div>
+                      <p className="text-2xl font-extrabold text-amber-900 mt-1">
+                        {formatTotalMinutes(lunch)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl bg-blue-50 p-4 border border-blue-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-blue-700">
+                          Pauses Matin/Soir
+                        </span>
+                        <PieChartIcon className="h-4 w-4 text-blue-500" />
+                      </div>
+                      <p className="text-2xl font-extrabold text-blue-900 mt-1">
+                        {formatTotalMinutes(other)}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="rounded-xl bg-amber-50 p-4 border border-amber-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-amber-700">
-                        Pause Déjeuner
-                      </span>
-                      <PieChartIcon className="h-4 w-4 text-amber-500" />
+                  {/* Pie Chart */}
+                  <div className="flex flex-col md:flex-row gap-6 items-start">
+                    <div className="md:w-1/2 flex items-center justify-center h-[250px] w-full">
+                      {chartData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={chartData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={80}
+                              paddingAngle={4}
+                              dataKey="value"
+                              label={false}
+                              labelLine={false}
+                            >
+                              {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Legend
+                              verticalAlign="bottom"
+                              height={36}
+                              iconType="circle"
+                              iconSize={8}
+                              formatter={(value, entry: any) => {
+                                return (
+                                  <span className="text-xs font-medium text-slate-700">
+                                    {value} ({entry.payload.percent}%)
+                                  </span>
+                                );
+                              }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="text-center text-xs text-slate-400 py-12">
+                          Aucune donnée de durée enregistrée
+                        </div>
+                      )}
                     </div>
-                    <p className="text-2xl font-extrabold text-amber-900 mt-1">
-                      {formatTotalMinutes(globalReportData.totalLunch)}
-                    </p>
+
+                    <div className="md:w-1/2 space-y-3 w-full">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Détail des durées
+                      </h4>
+                      <div className="space-y-2">
+                        {chartData.map((item) => (
+                          <div
+                            key={item.name}
+                            className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span
+                                className="h-3 w-3 rounded-full"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="text-xs font-semibold text-slate-700">
+                                {item.name}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-xs font-bold text-slate-900">
+                                {formatTotalMinutes(item.value)}
+                              </span>
+                              <span className="text-[10px] text-slate-400 block font-medium">
+                                {item.percent}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        {chartData.length === 0 && (
+                          <div className="text-center py-4 text-slate-400 text-xs">
+                            Aucune donnée de pointage pour cette période.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="rounded-xl bg-blue-50 p-4 border border-blue-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-blue-700">
-                        Pauses Matin/Soir
-                      </span>
-                      <PieChartIcon className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <p className="text-2xl font-extrabold text-blue-900 mt-1">
-                      {formatTotalMinutes(globalReportData.totalMorningAfternoon)}
+                  {/* PDF Export Button */}
+                  <div className="space-y-2">
+                    <Button
+                      onClick={handleExportGlobalReportPDF}
+                      disabled={globalReportExporting || !checkExportLimit()}
+                      variant="outline"
+                      className="w-full h-9 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
+                    >
+                      {globalReportExporting ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                      ) : (
+                        <PieChartIcon className="h-3.5 w-3.5 text-slate-500" />
+                      )}
+                      <span>Exporter PDF</span>
+                    </Button>
+                    <p className="text-center text-[10px] text-slate-500">
+                      Exports restants aujourd'hui : {getRemainingExports()}/{MAX_EXPORTS_PER_DAY}
                     </p>
                   </div>
                 </div>
-
-                {/* Pie Chart */}
-                <div className="flex flex-col md:flex-row gap-6 items-start">
-                  <div className="md:w-1/2 flex items-center justify-center h-[250px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: "Travail Effectif", value: globalReportData.totalEffective, color: "#10b981" },
-                            { name: "Pause Déjeuner", value: globalReportData.totalLunch, color: "#f59e0b" },
-                            { name: "Pauses Matin/Soir", value: globalReportData.totalMorningAfternoon, color: "#3b82f6" },
-                          ].filter((d) => d.value > 0)}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={80}
-                          paddingAngle={4}
-                          dataKey="value"
-                          label={false}
-                          labelLine={false}
-                        >
-                          {[
-                            { name: "Travail Effectif", value: globalReportData.totalEffective, color: "#10b981" },
-                            { name: "Pause Déjeuner", value: globalReportData.totalLunch, color: "#f59e0b" },
-                            { name: "Pauses Matin/Soir", value: globalReportData.totalMorningAfternoon, color: "#3b82f6" },
-                          ].filter((d) => d.value > 0).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Pie>
-                        <Legend
-                          verticalAlign="bottom"
-                          height={36}
-                          iconType="circle"
-                          iconSize={8}
-                          formatter={(value, entry: any) => {
-                            const chartData = [
-                              { name: "Travail Effectif", value: globalReportData.totalEffective, color: "#10b981" },
-                              { name: "Pause Déjeuner", value: globalReportData.totalLunch, color: "#f59e0b" },
-                              { name: "Pauses Matin/Soir", value: globalReportData.totalMorningAfternoon, color: "#3b82f6" },
-                            ].filter((d) => d.value > 0);
-                            const total = chartData.reduce((acc, curr) => acc + curr.value, 0);
-                            const percent = total > 0 ? ((entry.payload.value / total) * 100).toFixed(0) : 0;
-                            return (
-                              <span className="text-xs font-medium text-slate-700">
-                                {value} ({percent}%)
-                              </span>
-                            );
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <div className="md:w-1/2 space-y-3">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Détail des durées
-                    </h4>
-                    <div className="space-y-2">
-                      {globalReportData.totalEffective > 0 && (
-                        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
-                          <div className="flex items-center gap-2.5">
-                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#10b981" }} />
-                            <span className="text-xs font-semibold text-slate-700">Travail Effectif</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-slate-900">
-                              {formatTotalMinutes(globalReportData.totalEffective)}
-                            </span>
-                            {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0 && (
-                              <span className="text-[10px] text-slate-400 block font-medium">
-                                {Math.round((globalReportData.totalEffective / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {globalReportData.totalLunch > 0 && (
-                        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
-                          <div className="flex items-center gap-2.5">
-                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
-                            <span className="text-xs font-semibold text-slate-700">Pause Déjeuner</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-slate-900">
-                              {formatTotalMinutes(globalReportData.totalLunch)}
-                            </span>
-                            {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0 && (
-                              <span className="text-[10px] text-slate-400 block font-medium">
-                                {Math.round((globalReportData.totalLunch / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {globalReportData.totalMorningAfternoon > 0 && (
-                        <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50">
-                          <div className="flex items-center gap-2.5">
-                            <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
-                            <span className="text-xs font-semibold text-slate-700">Pauses Matin/Soir</span>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-xs font-bold text-slate-900">
-                              {formatTotalMinutes(globalReportData.totalMorningAfternoon)}
-                            </span>
-                            {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0 && (
-                              <span className="text-[10px] text-slate-400 block font-medium">
-                                {Math.round((globalReportData.totalMorningAfternoon / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)}%
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      {(globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon) === 0 && (
-                        <div className="text-center py-4 text-slate-400 text-xs">
-                          Aucune donnée de pointage pour cette période.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* PDF Export Button */}
-                <div className="space-y-2">
-                  <Button
-                    onClick={handleExportGlobalReportPDF}
-                    disabled={globalReportExporting || !checkExportLimit()}
-                    variant="outline"
-                    className="w-full h-9 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
-                  >
-                    {globalReportExporting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
-                    ) : (
-                      <PieChartIcon className="h-3.5 w-3.5 text-slate-500" />
-                    )}
-                    <span>Exporter PDF</span>
-                  </Button>
-                  <p className="text-center text-[10px] text-slate-500">
-                    Exports restants aujourd'hui : {getRemainingExports()}/{MAX_EXPORTS_PER_DAY}
-                  </p>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {!globalReportData && !isGlobalReportLoading && (
               <div className="text-center py-8 text-slate-400 text-xs">
@@ -1922,91 +1955,110 @@ export default function AttendancePage() {
               </tr>
             </thead>
             <tbody>
-              {globalReportData?.totalEffective && globalReportData.totalEffective > 0 && (
-                <tr className="border-b border-slate-100">
-                  <td className="p-3 text-slate-800 flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#10b981" }} />
-                    Travail Effectif
-                  </td>
-                  <td className="p-3 text-right font-semibold text-slate-900">
-                    {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0
-                      ? Math.round((globalReportData.totalEffective / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)
-                      : 0}%
-                  </td>
-                  <td className="p-3 text-right text-slate-600">
-                    {formatTotalMinutes(globalReportData.totalEffective)}
-                  </td>
-                </tr>
-              )}
-              {globalReportData?.totalLunch && globalReportData.totalLunch > 0 && (
-                <tr className="border-b border-slate-100">
-                  <td className="p-3 text-slate-800 flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
-                    Pause Déjeuner
-                  </td>
-                  <td className="p-3 text-right font-semibold text-slate-900">
-                    {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0
-                      ? Math.round((globalReportData.totalLunch / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)
-                      : 0}%
-                  </td>
-                  <td className="p-3 text-right text-slate-600">
-                    {formatTotalMinutes(globalReportData.totalLunch)}
-                  </td>
-                </tr>
-              )}
-              {globalReportData?.totalMorningAfternoon && globalReportData.totalMorningAfternoon > 0 && (
-                <tr className="border-b border-slate-100">
-                  <td className="p-3 text-slate-800 flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: "#3b82f6" }} />
-                    Pauses Matin/Soir
-                  </td>
-                  <td className="p-3 text-right font-semibold text-slate-900">
-                    {globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon > 0
-                      ? Math.round((globalReportData.totalMorningAfternoon / (globalReportData.totalEffective + globalReportData.totalLunch + globalReportData.totalMorningAfternoon)) * 100)
-                      : 0}%
-                  </td>
-                  <td className="p-3 text-right text-slate-600">
-                    {formatTotalMinutes(globalReportData.totalMorningAfternoon)}
-                  </td>
-                </tr>
-              )}
+              {(() => {
+                const effective = Math.max(0, globalReportData?.totalEffective || 0);
+                const lunch = Math.max(0, globalReportData?.totalLunch || 0);
+                const other = Math.max(0, globalReportData?.totalMorningAfternoon || 0);
+                const rawItems = [
+                  { name: "Travail Effectif", value: effective, color: "#10b981" },
+                  { name: "Pause Déjeuner", value: lunch, color: "#f59e0b" },
+                  { name: "Pauses Matin/Soir", value: other, color: "#3b82f6" },
+                ].filter((d) => d.value > 0);
+                const total = rawItems.reduce((acc, curr) => acc + curr.value, 0);
+
+                let accumulated = 0;
+                const pdfChartData = rawItems.map((item, index) => {
+                  let percent: number;
+                  if (index === rawItems.length - 1) {
+                    percent = Math.max(0, 100 - accumulated);
+                  } else {
+                    percent = total > 0
+                      ? Math.min(100 - accumulated, Math.round((item.value / total) * 100))
+                      : 0;
+                    accumulated += percent;
+                  }
+                  return { ...item, percent };
+                });
+
+                return (
+                  <>
+                    {pdfChartData.map((item) => (
+                      <tr key={item.name} className="border-b border-slate-100">
+                        <td className="p-3 text-slate-800 flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                          {item.name}
+                        </td>
+                        <td className="p-3 text-right font-semibold text-slate-900">
+                          {item.percent}%
+                        </td>
+                        <td className="p-3 text-right text-slate-600">
+                          {formatTotalMinutes(item.value)}
+                        </td>
+                      </tr>
+                    ))}
+                  </>
+                );
+              })()}
             </tbody>
           </table>
 
           {/* Chart */}
           <div className="flex justify-center">
-            <ResponsiveContainer width={600} height={300}>
-              <PieChart>
-                <Pie
-                  data={[
-                    { name: "Travail Effectif", value: globalReportData?.totalEffective || 0, color: "#10b981" },
-                    { name: "Pause Déjeuner", value: globalReportData?.totalLunch || 0, color: "#f59e0b" },
-                    { name: "Pauses Matin/Soir", value: globalReportData?.totalMorningAfternoon || 0, color: "#3b82f6" },
-                  ].filter((d) => d.value > 0)}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {[
-                    { name: "Travail Effectif", value: globalReportData?.totalEffective || 0, color: "#10b981" },
-                    { name: "Pause Déjeuner", value: globalReportData?.totalLunch || 0, color: "#f59e0b" },
-                    { name: "Pauses Matin/Soir", value: globalReportData?.totalMorningAfternoon || 0, color: "#3b82f6" },
-                  ].filter((d) => d.value > 0).map((entry, index) => (
-                    <Cell key={`pdf-cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Legend
-                  verticalAlign="bottom"
-                  height={36}
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize: "11px" }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            {(() => {
+              const effective = Math.max(0, globalReportData?.totalEffective || 0);
+              const lunch = Math.max(0, globalReportData?.totalLunch || 0);
+              const other = Math.max(0, globalReportData?.totalMorningAfternoon || 0);
+              const rawItems = [
+                { name: "Travail Effectif", value: effective, color: "#10b981" },
+                { name: "Pause Déjeuner", value: lunch, color: "#f59e0b" },
+                { name: "Pauses Matin/Soir", value: other, color: "#3b82f6" },
+              ].filter((d) => d.value > 0);
+              const total = rawItems.reduce((acc, curr) => acc + curr.value, 0);
+
+              let accumulated = 0;
+              const pdfChartData = rawItems.map((item, index) => {
+                let percent: number;
+                if (index === rawItems.length - 1) {
+                  percent = Math.max(0, 100 - accumulated);
+                } else {
+                  percent = total > 0
+                    ? Math.min(100 - accumulated, Math.round((item.value / total) * 100))
+                    : 0;
+                  accumulated += percent;
+                }
+                return { ...item, percent };
+              });
+
+              return (
+                <ResponsiveContainer width={600} height={300}>
+                  <PieChart>
+                    <Pie
+                      data={pdfChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {pdfChartData.map((entry, index) => (
+                        <Cell key={`pdf-cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      iconType="circle"
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: "11px" }}
+                      formatter={(value, entry: any) => {
+                        return `${value} (${entry.payload.percent}%)`;
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              );
+            })()}
           </div>
         </div>
       </div>

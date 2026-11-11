@@ -8,10 +8,12 @@ import EmployeeLayout from "@/components/layout/EmployeeLayout";
 import AdminDashboardPage from "@/pages/admin/DashboardPage";
 import UsersPage from "@/pages/admin/UsersPage";
 import UserDetailPage from "@/pages/admin/UserDetailPage";
+import AdminUserHistoryPage from "@/pages/admin/AdminUserHistory";
 import AttendancePage from "@/pages/admin/AttendancePage";
 import TasksPage from "@/pages/admin/TasksPage";
 import EmployeeDashboardPage from "@/pages/employee/DashboardPage";
 import EmployeeAttendancePage from "@/pages/employee/AttendancePage";
+import EmployeeHistoryPage from "@/pages/employee/EmployeeHistory";
 import EmployeeTasksPage from "@/pages/employee/TasksPage";
 import EmployeeProfilePage from "@/pages/employee/ProfilePage";
 
@@ -38,6 +40,7 @@ export default function App() {
                 <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<AdminDashboardPage />} />
                 <Route path="users" element={<UsersPage />} />
+                <Route path="users/:id/history" element={<AdminUserHistoryPage />} />
                 <Route path="users/:id" element={<UserDetailPage />} />
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="tasks" element={<TasksPage />} />
@@ -50,6 +53,7 @@ export default function App() {
                 <Route index element={<Navigate to="/employee/dashboard" replace />} />
                 <Route path="dashboard" element={<EmployeeDashboardPage />} />
                 <Route path="attendance" element={<EmployeeAttendancePage />} />
+                <Route path="history" element={<EmployeeHistoryPage />} />
                 <Route path="tasks" element={<EmployeeTasksPage />} />
                 <Route path="profile" element={<EmployeeProfilePage />} />
               </Route>

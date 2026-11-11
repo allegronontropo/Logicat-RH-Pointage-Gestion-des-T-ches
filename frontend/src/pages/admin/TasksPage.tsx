@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   CheckSquare,
   Plus,
@@ -151,6 +151,13 @@ export default function TasksPage() {
     setCurrentPage(1);
   }, [searchParams, users]);
 
+  useEffect(() => {
+    if (searchParams.get("sort") === "due_date") {
+      setSortColumn("due_date");
+      setSortDirection("asc");
+    }
+  }, [searchParams]);
+
   // Convert employees to EmployeeOption shape for the combobox
   const employeeOptions: EmployeeOption[] = useMemo(
     () =>
@@ -242,6 +249,10 @@ export default function TasksPage() {
 
   // Client-side text search & department filter
   const filteredTasks = tasks.filter((t) => {
+    if (searchParams.get("hide_done") === "true" && t.status === "DONE") {
+      return false;
+    }
+
     // Filter by department
     if (departmentFilter !== "ALL") {
       const taskDept = getTaskDepartment(t);
@@ -495,6 +506,12 @@ export default function TasksPage() {
     const assigneeName = task.assignee
       ? `${task.assignee.first_name} ${task.assignee.last_name}`
       : `Employé #${task.assigned_to}`;
+    const taskEmployeeId = task.assignee?.employee_id ?? task.assigned_to;
+    const targetUser = users.find(
+      (user) =>
+        (user.employee_profile?.id ?? user.employee_id) === taskEmployeeId
+    );
+    const correctUserId = targetUser?.id ?? taskEmployeeId;
 
     const initials = task.assignee
       ? `${task.assignee.first_name[0] || ""}${task.assignee.last_name[0] || ""}`.toUpperCase()
@@ -558,12 +575,16 @@ export default function TasksPage() {
 
         {/* Assigné à */}
         <TableCell>
-          <div className="flex items-center gap-2">
+          <Link
+            to={`/admin/users/${correctUserId}`}
+            onClick={(event) => event.stopPropagation()}
+            className="flex items-center gap-2 group hover:bg-slate-100 p-1 -m-1 rounded-md transition-colors"
+          >
             <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-600 text-[10px] font-bold text-white shadow-sm">
               {initials}
             </div>
             <div className="min-w-0">
-              <span className="text-xs font-semibold text-slate-800 truncate block">
+              <span className="text-xs font-semibold text-slate-800 truncate block group-hover:text-primary group-hover:underline">
                 {assigneeName}
               </span>
               {sortColumn && (
@@ -572,7 +593,7 @@ export default function TasksPage() {
                 </span>
               )}
             </div>
-          </div>
+          </Link>
         </TableCell>
 
         {/* Priorité */}

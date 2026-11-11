@@ -1,9 +1,5 @@
 /**
- * src/pages/auth/LoginPage.tsx
- * ----------------------------
- * Split-screen login page.
- * Left: Blue gradient branding panel.
- * Right: Login card with quick-fill demo buttons.
+ * Enterprise sign-in page.
  */
 
 import { useState } from "react";
@@ -11,18 +7,11 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Building2, Loader2 } from "lucide-react";
+import { ArrowRight, Lock, Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/auth/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 const loginSchema = z.object({
   email: z.string().email("Email invalide"),
@@ -31,181 +20,97 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
-const DEMO_ACCOUNTS = [
-  {
-    label: "Admin 1",
-    email: "admin1@logicat.ma",
-    password: "Admin123!",
-    color: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-  },
-  {
-    label: "Admin 2",
-    email: "admin2@logicat.ma",
-    password: "Admin123!",
-    color: "bg-indigo-100 text-indigo-800 hover:bg-indigo-200",
-  },
-  {
-    label: "Employé",
-    email: "ybadri@logicat.eu",
-    password: "Emp123!",
-    color: "bg-green-100 text-green-800 hover:bg-green-200",
-  },
-];
+const logoSrc = "/images/Logo-logicat-Digital.webp";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isLoading: authLoading } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
 
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
   });
-
-  function fillDemo(email: string, password: string) {
-    setValue("email", email, { shouldValidate: true });
-    setValue("password", password, { shouldValidate: true });
-    setServerError(null);
-  }
 
   async function onSubmit(data: LoginFormData) {
     setServerError(null);
     try {
       const user = await login(data.email, data.password);
-      if (user.role === "ADMIN_RH") {
-        navigate("/admin/dashboard", { replace: true });
-      } else {
-        navigate("/employee/dashboard", { replace: true });
-      }
+      navigate(user.role === "ADMIN_RH" ? "/admin/dashboard" : "/employee/dashboard", { replace: true });
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
         "Identifiants invalides. Vérifiez votre email et mot de passe.";
-      setServerError(msg);
+      setServerError(typeof msg === "string" ? msg : "La connexion a échoué. Veuillez réessayer.");
     }
   }
+  const busy = isSubmitting || authLoading;
 
   return (
-    <div className="flex h-screen">
-      {/* ── Left panel: Blue gradient branding ─────────────── */}
-      <div className="hidden w-1/2 flex-col items-center justify-center bg-gradient-to-br from-[#1E40AF] to-[#3B82F6] p-12 lg:flex">
-        <Building2 className="mb-6 h-16 w-16 text-white" />
-        <h1 className="mb-2 text-4xl font-bold text-white">LOGICAT RH</h1>
-        <p className="mb-8 text-center text-lg text-blue-100">
-          Application de Gestion des Ressources Humaines
-        </p>
-        <div className="rounded-xl bg-white/10 p-6 backdrop-blur-sm">
-          <ul className="space-y-2 text-sm text-blue-50">
-            <li>✓ Pointages &amp; présences en temps réel</li>
-            <li>✓ Gestion des tâches et assignations</li>
-            <li>✓ Tableaux de bord administratif</li>
-            <li>✓ Contrôle d'accès basé sur les rôles</li>
-          </ul>
+    <main className="grid min-h-screen grid-cols-1 bg-white md:grid-cols-2">
+      {/* Desktop brand panel */}
+      <section className="relative hidden overflow-hidden bg-gradient-to-br from-[#123b9a] via-[#1746b3] to-[#0b1e4b] px-12 py-16 text-white md:flex md:flex-col md:items-center md:justify-center">
+        <div aria-hidden="true" className="absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,.5)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.5)_1px,transparent_1px)] [background-size:48px_48px]" />
+        <div aria-hidden="true" className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-blue-400/10 blur-3xl" />
+        <div aria-hidden="true" className="absolute -bottom-28 -right-20 h-96 w-96 rounded-full bg-indigo-400/10 blur-3xl" />
+        <div className="relative flex max-w-lg flex-col items-center text-center">
+          <div className="mb-7 rounded-2xl bg-white px-6 py-4 shadow-2xl shadow-black/20">
+            <img src={logoSrc} alt="LOGICAT" className="h-auto w-64 object-contain" />
+          </div>
+          <p className="text-lg font-medium text-blue-100">Portail de gestion des ressources humaines</p>
+          <div className="mt-10 h-px w-20 bg-blue-300/50" />
+          <p className="mt-6 text-sm leading-6 text-blue-100/80">Un espace sécurisé pour gérer les présences, les tâches et le suivi des équipes.</p>
         </div>
-      </div>
+      </section>
 
-      {/* ── Right panel: Login card ─────────────────────────── */}
-      <div className="flex flex-1 items-center justify-center bg-gray-50 p-8">
-        <div className="w-full max-w-md space-y-6">
-          {/* Mobile logo */}
-          <div className="flex items-center gap-3 lg:hidden">
-            <Building2 className="h-8 w-8 text-[#1E40AF]" />
-            <span className="text-xl font-bold text-[#1E40AF]">LOGICAT RH</span>
+      {/* Sign-in panel */}
+      <section className="flex min-h-screen items-center justify-center bg-slate-50 px-5 py-10 sm:px-8 md:min-h-0 md:px-12">
+        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/60 sm:p-9">
+          <div className="mb-8 flex justify-center md:hidden">
+            <img src={logoSrc} alt="LOGICAT" className="h-auto w-44 rounded-xl bg-white p-2 shadow-sm" />
           </div>
 
-          <Card className="shadow-lg">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl">Connexion</CardTitle>
-              <CardDescription>
-                Entrez vos identifiants pour accéder au portail.
-              </CardDescription>
-            </CardHeader>
+          <header className="mb-7">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Espace sécurisé</p>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900">Connexion</h2>
+            <p className="mt-2 text-sm text-slate-500">Accédez à votre espace sécurisé.</p>
+          </header>
 
-            <CardContent className="space-y-5">
-              {/* Quick-fill demo buttons */}
-              <div>
-                <p className="mb-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  Comptes de démonstration
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {DEMO_ACCOUNTS.map(({ label, email, password, color }) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => fillDemo(email, password)}
-                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${color}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+            <div className="space-y-2">
+              <Label htmlFor="email" className="text-sm font-medium text-slate-700">Adresse email</Label>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input id="email" type="email" placeholder="nom@entreprise.ma" autoComplete="email" className="h-11 pl-10" aria-invalid={!!errors.email} {...register("email")} />
               </div>
+              {errors.email && <p className="text-xs text-rose-600">{errors.email.message}</p>}
+            </div>
 
-              <div className="border-t border-gray-100" />
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium text-slate-700">Mot de passe</Label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input id="password" type="password" placeholder="Votre mot de passe" autoComplete="current-password" className="h-11 pl-10" aria-invalid={!!errors.password} {...register("password")} />
+              </div>
+              {errors.password && <p className="text-xs text-rose-600">{errors.password.message}</p>}
+            </div>
 
-              {/* Login form */}
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Adresse email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@logicat.eu"
-                    autoComplete="email"
-                    {...register("email")}
-                  />
-                  {errors.email && (
-                    <p className="text-xs text-red-600">{errors.email.message}</p>
-                  )}
-                </div>
+            {serverError && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{serverError}</div>}
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Mot de passe</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    {...register("password")}
-                  />
-                  {errors.password && (
-                    <p className="text-xs text-red-600">{errors.password.message}</p>
-                  )}
-                </div>
+            <Button type="submit" disabled={busy} className="h-11 w-full bg-blue-700 font-semibold text-white shadow-sm shadow-blue-900/15 hover:bg-blue-800">
+              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {busy ? "Connexion…" : "Se connecter"}
+              {!busy && <ArrowRight className="ml-auto h-4 w-4" />}
+            </Button>
+          </form>
 
-                {serverError && (
-                  <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700">
-                    {serverError}
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full bg-[#1E40AF] hover:bg-[#1E3A8A]"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Connexion…
-                    </>
-                  ) : (
-                    "Se connecter"
-                  )}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <p className="text-center text-xs text-gray-400">
-            LOGICAT GROUP · Portail RH interne · Accès réservé
-          </p>
+          <p className="mt-8 text-center text-xs text-slate-400">LOGICAT GROUP · Portail RH interne · Accès réservé</p>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

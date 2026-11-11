@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -54,6 +54,8 @@ class EmployeeProfileUpdate(BaseModel):
 
     Only phone and password are allowed — enforced by the schema itself.
     """
+
+    model_config = ConfigDict(extra="ignore")
 
     phone: str | None = Field(default=None, max_length=30)
     password: str | None = Field(default=None, min_length=8, max_length=128)

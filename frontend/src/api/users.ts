@@ -7,6 +7,8 @@
 import { apiClient } from "./client";
 import type { UserDetail } from "@/types";
 
+export type { UserDetail };
+
 export interface UserCreatePayload {
   email: string;
   password: string;

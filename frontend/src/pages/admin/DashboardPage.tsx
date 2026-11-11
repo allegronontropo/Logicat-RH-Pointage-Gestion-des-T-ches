@@ -21,7 +21,9 @@ import {
   Clock,
   RotateCw,
   Calendar,
+  ArrowRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { getAdminDashboard } from "@/api/dashboard";
 import { listAllAttendance } from "@/api/attendances";
 import { listTasks } from "@/api/tasks";
@@ -33,7 +35,6 @@ import { RecentActivityFeed } from "@/components/dashboard/RecentActivityFeed";
 import { QuickActionsPanel } from "@/components/dashboard/QuickActionsPanel";
 import { RecentAbsences } from "@/components/dashboard/RecentAbsences";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { CreateUserModal } from "@/components/shared/CreateUserModal";
 import { CreateTaskModal } from "@/components/shared/CreateTaskModal";
 
@@ -91,40 +92,15 @@ export default function AdminDashboardPage() {
     queryFn: () => listTasks(),
   });
 
-  // Pagination & Sort for upcoming deadlines (10 per page)
-  const DEADLINES_PAGE_SIZE = 10;
-  const [currentDeadlinesPage, setCurrentDeadlinesPage] = useState(1);
-  const [deadlineSort, setDeadlineSort] = useState<"asc" | "desc" | null>(null);
-
-  const filteredUpcomingTasks = useMemo(() => {
-    return allTasks.filter((t: Task) => t.status !== "DONE" && Boolean(t.due_date));
-  }, [allTasks]);
-
-  const sortedDeadlines = useMemo(() => {
-    const list = [...filteredUpcomingTasks];
-    if (!deadlineSort) {
-      return list.sort(
-        (a, b) => new Date(a.due_date || "").getTime() - new Date(b.due_date || "").getTime()
-      );
-    }
-    return list.sort((a, b) => {
-      const dateA = new Date(a.due_date || "").getTime();
-      const dateB = new Date(b.due_date || "").getTime();
-      return deadlineSort === "asc" ? dateA - dateB : dateB - dateA;
-    });
-  }, [filteredUpcomingTasks, deadlineSort]);
-
-  const totalDeadlinesPages = Math.max(
-    1,
-    Math.ceil(sortedDeadlines.length / DEADLINES_PAGE_SIZE)
-  );
-
   const upcomingDeadlines = useMemo(() => {
-    return sortedDeadlines.slice(
-      (currentDeadlinesPage - 1) * DEADLINES_PAGE_SIZE,
-      currentDeadlinesPage * DEADLINES_PAGE_SIZE
-    );
-  }, [sortedDeadlines, currentDeadlinesPage]);
+    return allTasks
+      .filter((task: Task) => task.status !== "DONE" && Boolean(task.due_date))
+      .sort(
+        (a, b) =>
+          new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime()
+      )
+      .slice(0, 5);
+  }, [allTasks]);
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
@@ -292,38 +268,6 @@ export default function AdminDashboardPage() {
                   Échéances à venir
                 </CardTitle>
               </div>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDeadlineSort(null)}
-                  className={`text-xs px-2 py-1 ${
-                    deadlineSort === null ? "bg-slate-100 text-slate-900 font-bold" : ""
-                  }`}
-                >
-                  Tous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDeadlineSort("asc")}
-                  className={`text-xs px-2 py-1 ${
-                    deadlineSort === "asc" ? "bg-slate-100 text-slate-900 font-bold" : ""
-                  }`}
-                >
-                  ▲
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDeadlineSort("desc")}
-                  className={`text-xs px-2 py-1 ${
-                    deadlineSort === "desc" ? "bg-slate-100 text-slate-900 font-bold" : ""
-                  }`}
-                >
-                  ▼
-                </Button>
-              </div>
             </CardHeader>
             <CardContent className="p-3 space-y-2">
               {upcomingDeadlines.length === 0 ? (
@@ -378,35 +322,18 @@ export default function AdminDashboardPage() {
                   );
                 })
               )}
-              </CardContent>
-              {totalDeadlinesPages > 1 && (
-                <div className="flex items-center justify-between gap-2 p-3 pt-2 border-t border-slate-50">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentDeadlinesPage === 1}
-                    onClick={() => setCurrentDeadlinesPage((prev) => Math.max(1, prev - 1))}
-                    className="text-xs px-2 py-1"
-                  >
-                    Précédent
-                  </Button>
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    Page {currentDeadlinesPage} / {totalDeadlinesPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentDeadlinesPage === totalDeadlinesPages}
-                    onClick={() => setCurrentDeadlinesPage((prev) => Math.min(totalDeadlinesPages, prev + 1))}
-                    className="text-xs px-2 py-1"
-                  >
-                    Suivant
-                  </Button>
-                </div>
-              )}
-            </Card>
-          </div>
+            </CardContent>
+            <div className="p-3 border-t border-slate-100 bg-slate-50/50 text-center">
+              <Link
+                to="/admin/tasks?hide_done=true&sort=due_date"
+                className="text-xs font-semibold text-primary hover:underline flex items-center justify-center gap-1"
+              >
+                Voir toutes les échéances <ArrowRight className="h-3 w-3" />
+              </Link>
+            </div>
+          </Card>
         </div>
+      </div>
 
       {/* ── Quick Action Modals ─────────────────────────────── */}
       <CreateUserModal

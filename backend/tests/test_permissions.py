@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
+import jwt
 import pytest
 from fastapi import HTTPException
 
 from app.core.security import hash_password, create_access_token
+from app.core.config import settings
 from app.models.attendance import Attendance
 from app.models.break_ import Break
 from app.models.employee import Employee
@@ -56,6 +58,78 @@ def test_employee_cannot_list_users(client, db_session):
     token = _make_token(employee)
     response = client.get("/api/users/", headers=_auth_header(token))
     assert response.status_code == 403
+
+
+def test_employee_profile_rejects_mass_assignment(client, db_session):
+    employee_user = _make_user(db_session, "profile-emp@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee = Employee(user_id=employee_user.id, department="Finance")
+    db_session.add(employee)
+    db_session.commit()
+
+    response = client.patch(
+        "/api/employees/me/profile",
+        json={"phone": "0600000000", "role": "ADMIN_RH", "department": "IT"},
+        headers=_auth_header(_make_token(employee_user)),
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(employee_user)
+    db_session.refresh(employee)
+    assert employee_user.phone == "0600000000"
+    assert employee_user.role == "EMPLOYEE"
+    assert employee.department == "Finance"
+
+
+def test_employee_id_query_parameters_cannot_select_another_employees_data(client, db_session):
+    user_a = _make_user(db_session, "query-a@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee_a = Employee(user_id=user_a.id, department="IT")
+    user_b = _make_user(db_session, "query-b@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee_b = Employee(user_id=user_b.id, department="HR")
+    db_session.add_all([employee_a, employee_b])
+    db_session.commit()
+    task = Task(title="Private task", assigned_to=employee_b.id, created_by=user_a.id)
+    attendance = Attendance(employee_id=employee_b.id, date=date(2026, 11, 10), status="PRESENT")
+    db_session.add_all([task, attendance])
+    db_session.commit()
+
+    token = _make_token(user_a)
+    tasks_response = client.get(
+        f"/api/tasks/me?employee_id={employee_b.id}", headers=_auth_header(token)
+    )
+    attendance_response = client.get(
+        f"/api/attendances/me?employee_id={employee_b.id}", headers=_auth_header(token)
+    )
+
+    assert tasks_response.status_code == 200
+    assert tasks_response.json() == []
+    assert attendance_response.status_code == 200
+    assert attendance_response.json() == []
+
+
+def test_unknown_role_cannot_use_attendance_detail_admin_path(client, db_session):
+    employee_user = _make_user(db_session, "owned@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee = Employee(user_id=employee_user.id, department="IT")
+    unknown_user = _make_user(db_session, "unknown@logicat.ma", "Emp123!", "MANAGER")
+    db_session.add(employee)
+    db_session.commit()
+    attendance = Attendance(employee_id=employee.id, date=date(2026, 11, 10), status="PRESENT")
+    db_session.add(attendance)
+    db_session.commit()
+
+    response = client.get(
+        f"/api/attendances/{attendance.id}", headers=_auth_header(_make_token(unknown_user))
+    )
+
+    assert response.status_code == 403
+
+
+def test_signed_token_with_invalid_subject_returns_401(client, db_session):
+    user = _make_user(db_session, "invalid-subject@logicat.ma", "Emp123!", "EMPLOYEE")
+    token = jwt.encode({"sub": "not-an-id", "role": user.role}, settings.secret_key, algorithm="HS256")
+
+    response = client.get("/api/auth/me", headers=_auth_header(token))
+
+    assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------

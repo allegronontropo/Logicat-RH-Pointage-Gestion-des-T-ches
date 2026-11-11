@@ -397,3 +397,25 @@ def test_export_employee_attendance_csv(client, db_session):
     )
     assert resp_emp.status_code == 403
 
+
+def test_calculate_durations_clamped_to_zero():
+    att = Attendance(
+        employee_id=1,
+        date=date(2026, 11, 1),
+        check_in=datetime(2026, 11, 1, 9, 0, 0, tzinfo=timezone.utc),
+        check_out=datetime(2026, 11, 1, 9, 10, 0, tzinfo=timezone.utc),
+        status="PRESENT",
+    )
+    b1 = Break(
+        attendance_id=1,
+        type="LUNCH",
+        start_time=datetime(2026, 11, 1, 9, 0, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 11, 1, 9, 18, 0, tzinfo=timezone.utc),
+    )
+    att.breaks = [b1]
+    presence, breaks, effective = calculate_durations(att)
+    assert presence == 10
+    assert breaks == 18
+    assert effective == 0
+
+
