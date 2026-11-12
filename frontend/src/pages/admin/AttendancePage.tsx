@@ -674,7 +674,7 @@ export default function AttendancePage() {
   }
 
   return (
-    <div className="space-y-6 max-w-[1600px] mx-auto pb-12">
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-12 overflow-x-hidden">
       {/* ── Top Page Header ───────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -694,7 +694,7 @@ export default function AttendancePage() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -703,7 +703,7 @@ export default function AttendancePage() {
               refetch();
             }}
             disabled={isFetching}
-            className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200"
+            className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 w-full sm:w-auto"
           >
             <RotateCw
               className={`h-3.5 w-3.5 mr-1.5 text-slate-500 ${
@@ -716,7 +716,7 @@ export default function AttendancePage() {
           <Button
             onClick={handleOpenDeclare}
             size="sm"
-            className="h-9 px-4 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-sm gap-1.5"
+            className="h-9 px-4 text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white shadow-sm gap-1.5 w-full sm:w-auto"
           >
             <CalendarX className="h-4 w-4" />
             <span>Déclarer une Absence</span>
@@ -725,7 +725,7 @@ export default function AttendancePage() {
           <Button
             onClick={() => setIsGlobalReportOpen(true)}
             size="sm"
-            className="h-9 px-4 text-xs font-semibold bg-primary hover:bg-blue-800 text-white shadow-sm gap-1.5"
+            className="h-9 px-4 text-xs font-semibold bg-primary hover:bg-blue-800 text-white shadow-sm gap-1.5 w-full sm:w-auto"
           >
             <BarChart3 className="h-4 w-4" />
             <span>Rapport Global</span>
@@ -845,7 +845,7 @@ export default function AttendancePage() {
                   setSelectedDepartment("ALL");
                   setStatusFilter("ALL");
                 }}
-                className="h-9 px-3 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200 w-full"
+                className="h-9 px-3 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 border-slate-200 flex-1 min-w-0"
               >
                 Aujourd'hui
               </Button>
@@ -858,7 +858,7 @@ export default function AttendancePage() {
                   setSelectedDepartment("ALL");
                   setStatusFilter("ALL");
                 }}
-                className="h-9 px-3 text-xs font-semibold text-slate-500 hover:text-slate-800 w-full"
+                className="h-9 px-3 text-xs font-semibold text-slate-500 hover:text-slate-800 flex-1 min-w-0"
               >
                 Effacer filtres
               </Button>
@@ -868,8 +868,9 @@ export default function AttendancePage() {
       </Card>
 
       {/* ── Attendance Data Table ──────────────────────────────── */}
-      <Card className="border border-slate-200/90 bg-white shadow-sm overflow-hidden">
-        <Table>
+      <Card className="border-0 bg-transparent shadow-none overflow-hidden">
+        <div className="w-full overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <Table className="min-w-[1000px] w-full">
           <TableHeader className="bg-slate-50/80">
             <TableRow>
               {/* 1. Employé */}
@@ -1269,6 +1270,7 @@ export default function AttendancePage() {
             )}
           </TableBody>
         </Table>
+        </div>
 
         {/* Pagination Bar */}
         {sortedAttendances.length > 0 && (
