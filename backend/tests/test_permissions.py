@@ -189,10 +189,11 @@ def test_admin_cannot_deactivate_self(client, db_session):
 # ---------------------------------------------------------------------------
 
 def test_admin_cannot_deactivate_last_admin(client, db_session):
-    admin = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
-    token = _make_token(admin)
+    admin1 = _make_user(db_session, "admin1@logicat.ma", "Admin123!", "ADMIN_RH")
+    admin2 = _make_user(db_session, "admin2@logicat.ma", "Admin123!", "ADMIN_RH")
+    token = _make_token(admin1)
     response = client.patch(
-        f"/api/users/{admin.id}/deactivate", headers=_auth_header(token)
+        f"/api/users/{admin2.id}/deactivate", headers=_auth_header(token)
     )
     assert response.status_code == 409
 

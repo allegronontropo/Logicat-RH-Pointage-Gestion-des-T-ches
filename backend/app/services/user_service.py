@@ -126,6 +126,12 @@ def deactivate_user(
             detail="User not found",
         )
 
+    if target_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot deactivate your own account",
+        )
+
     if target.role == "ADMIN_RH" and target.is_active:
         active_admins = (
             db.query(User)
@@ -137,12 +143,6 @@ def deactivate_user(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Il faut conserver au moins deux comptes Admin RH actifs.",
             )
-
-    if target_id == current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot deactivate your own account",
-        )
 
     target.is_active = False
     db.commit()
