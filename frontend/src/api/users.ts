@@ -29,6 +29,8 @@ export interface UserUpdatePayload {
   department?: string;
   position?: string;
   hire_date?: string;
+  expected_start_time?: string;
+  expected_end_time?: string;
   is_active?: boolean;
 }
 

@@ -1,12 +1,10 @@
 /**
  * src/pages/employee/ProfilePage.tsx
  * ------------------------------------
- * Employee Profile — read-only view.
+ * Employee Profile — view and update own phone number/password.
  *
  * All /api/users/* endpoints are admin-only (Depends(require_admin)).
- * Employees cannot edit their own profile via API.
- * We display the info stored in AuthContext (from login response)
- * and show a contact-admin note for any changes.
+ * Employees can update their own phone number and password.
  */
 
 import { useState } from "react";
@@ -64,7 +62,7 @@ function ProfileRow({
 // ── Main Component ─────────────────────────────────────────────────────────
 
 export default function EmployeeProfilePage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [password, setPassword] = useState("");
@@ -94,7 +92,7 @@ export default function EmployeeProfilePage() {
     try {
       const response = await apiClient.patch("/api/employees/me/profile", payload);
       const updatedUser = { ...user, ...response.data };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
+      updateUser(updatedUser);
       setPhone(updatedUser.phone ?? "");
       setPassword("");
       setEditOpen(false);

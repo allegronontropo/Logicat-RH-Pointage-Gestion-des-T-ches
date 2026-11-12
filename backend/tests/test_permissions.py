@@ -10,13 +10,13 @@ T11: Admin tries to deactivate the last active admin → 409
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 import jwt
 import pytest
 from fastapi import HTTPException
 
-from app.core.security import hash_password, create_access_token
+from app.core.security import hash_password, create_access_token, verify_password
 from app.core.config import settings
 from app.models.attendance import Attendance
 from app.models.break_ import Break
@@ -73,11 +73,49 @@ def test_employee_profile_rejects_mass_assignment(client, db_session):
     )
 
     assert response.status_code == 200
+    assert response.json()["phone"] == "0600000000"
     db_session.refresh(employee_user)
     db_session.refresh(employee)
     assert employee_user.phone == "0600000000"
     assert employee_user.role == "EMPLOYEE"
     assert employee.department == "Finance"
+
+    me_response = client.get("/api/auth/me", headers=_auth_header(_make_token(employee_user)))
+    assert me_response.status_code == 200
+    assert me_response.json()["phone"] == "0600000000"
+
+
+def test_employee_can_update_password_and_only_hash_is_persisted(client, db_session):
+    old_password = "OldEmp123!"
+    new_password = "NewEmp456!"
+    employee_user = _make_user(db_session, "password-profile-emp@logicat.ma", old_password, "EMPLOYEE")
+    db_session.add(Employee(user_id=employee_user.id, department="Finance"))
+    db_session.commit()
+
+    response = client.patch(
+        "/api/employees/me/profile",
+        json={"password": new_password},
+        headers=_auth_header(_make_token(employee_user)),
+    )
+
+    assert response.status_code == 200
+    assert "password" not in response.json()
+    assert "password_hash" not in response.json()
+    db_session.refresh(employee_user)
+    assert employee_user.password_hash != new_password
+    assert verify_password(new_password, employee_user.password_hash)
+    assert not verify_password(old_password, employee_user.password_hash)
+
+    new_login = client.post(
+        "/api/auth/login",
+        json={"email": employee_user.email, "password": new_password},
+    )
+    old_login = client.post(
+        "/api/auth/login",
+        json={"email": employee_user.email, "password": old_password},
+    )
+    assert new_login.status_code == 200
+    assert old_login.status_code == 401
 
 
 def test_employee_id_query_parameters_cannot_select_another_employees_data(client, db_session):
@@ -194,6 +232,31 @@ def test_admin_can_change_another_admin_role(client, db_session):
     )
     assert response.status_code == 200
     assert response.json()["role"] == "EMPLOYEE"
+
+
+def test_admin_can_update_employee_expected_schedule(client, db_session):
+    admin = _make_user(db_session, "admin_schedule@logicat.ma", "Admin123!", "ADMIN_RH")
+    employee_user = _make_user(db_session, "employee_schedule@logicat.ma", "Emp123!", "EMPLOYEE")
+    employee = Employee(user_id=employee_user.id, department="IT")
+    db_session.add(employee)
+    db_session.commit()
+    token = _make_token(admin)
+
+    response = client.put(
+        f"/api/users/{employee_user.id}",
+        json={"expected_start_time": "10:00", "expected_end_time": "17:00"},
+        headers=_auth_header(token),
+    )
+
+    assert response.status_code == 200
+    db_session.refresh(employee)
+    assert employee.expected_start_time == time(10, 0)
+    assert employee.expected_end_time == time(17, 0)
+
+    detail = client.get(f"/api/users/{employee_user.id}", headers=_auth_header(token))
+    assert detail.status_code == 200
+    assert detail.json()["expected_start_time"] == "10:00:00"
+    assert detail.json()["expected_end_time"] == "17:00:00"
 
 
 # ---------------------------------------------------------------------------

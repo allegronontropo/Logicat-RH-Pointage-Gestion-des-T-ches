@@ -81,6 +81,10 @@ def update_user(
         )
 
     update_dict = update_data.model_dump(exclude_unset=True)
+    hire_date_was_provided = "hire_date" in update_dict
+    hire_date = update_dict.pop("hire_date", None)
+    expected_start_time = update_dict.pop("expected_start_time", None)
+    expected_end_time = update_dict.pop("expected_end_time", None)
 
     # Rule: no self role change (self-demotion / self-promotion).
     if user.id == current_user.id:
@@ -94,6 +98,14 @@ def update_user(
     for field, value in update_dict.items():
         setattr(user, field, value)
 
+    if user.employee is not None:
+        if hire_date_was_provided:
+            user.employee.hire_date = hire_date
+        if expected_start_time is not None:
+            user.employee.expected_start_time = expected_start_time
+        if expected_end_time is not None:
+            user.employee.expected_end_time = expected_end_time
+
     db.commit()
     db.refresh(user)
     return user
@@ -104,7 +116,7 @@ def deactivate_user(
 ) -> None:
     """Deactivate a user.
 
-    Raises HTTP 409 if the target is the last active ADMIN_RH.
+    Raises HTTP 409 if deactivating the target would leave fewer than two active ADMIN_RH accounts.
     Raises HTTP 403 if the target is the current user (self-deactivation).
     """
     target = db.get(User, target_id)
@@ -120,10 +132,10 @@ def deactivate_user(
             .filter(User.role == "ADMIN_RH", User.is_active == True)  # noqa: E712
             .count()
         )
-        if active_admins <= 1:
+        if active_admins <= 2:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot deactivate the last active ADMIN_RH",
+                detail="Il faut conserver au moins deux comptes Admin RH actifs.",
             )
 
     if target_id == current_user.id:
@@ -159,7 +171,7 @@ def delete_user(
     Safety rules:
       - 404 if the user does not exist.
       - 403 if the target is the current user (no self-deletion).
-      - 409 if the target is the last active ADMIN_RH.
+      - 409 if deleting the target would leave fewer than two active ADMIN_RH accounts.
       - 409 if the target employee still has unfinished tasks assigned to them.
 
     Breaks, attendances and the employee profile are removed explicitly so
@@ -185,10 +197,10 @@ def delete_user(
             .filter(User.role == "ADMIN_RH", User.is_active == True)  # noqa: E712
             .count()
         )
-        if active_admins <= 1:
+        if active_admins <= 2:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Cannot delete the last active ADMIN_RH",
+                detail="Il faut conserver au moins deux comptes Admin RH actifs.",
             )
 
     employee = target.employee

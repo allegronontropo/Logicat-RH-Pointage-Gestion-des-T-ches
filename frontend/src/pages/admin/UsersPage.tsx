@@ -19,6 +19,9 @@ import {
   X,
   Eye,
   Trash2,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -80,6 +83,8 @@ export default function UsersPage() {
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
+  const [hireDateSearch, setHireDateSearch] = useState("");
+  const [hireDateSort, setHireDateSort] = useState<"asc" | "desc" | null>(null);
   const [roleFilter, setRoleFilter] = useState<"ALL" | "ADMIN_RH" | "EMPLOYEE">("ALL");
   const [departmentFilter, setDepartmentFilter] = useState<string>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
@@ -136,6 +141,26 @@ export default function UsersPage() {
       }),
   });
 
+  const {
+    data: activeAdminUsers,
+    isLoading: isActiveAdminUsersLoading,
+    isFetching: isActiveAdminUsersFetching,
+    isError: isActiveAdminUsersError,
+    refetch: refetchActiveAdminUsers,
+  } = useQuery({
+    queryKey: ["admin-users", "active-admins"],
+    queryFn: () => listUsers({ role: "ADMIN_RH", is_active: true }),
+    refetchOnWindowFocus: true,
+  });
+
+  function getAdminRemovalBlockReason(targetUser: UserDetail | null | undefined): string | null {
+    if (!targetUser || targetUser.role !== "ADMIN_RH" || !targetUser.is_active) return null;
+    if (isActiveAdminUsersLoading || isActiveAdminUsersFetching) return "Vérification des Admin RH actifs…";
+    if (isActiveAdminUsersError || !activeAdminUsers) return "Impossible de vérifier le nombre d’Admin RH actifs.";
+    if (activeAdminUsers.length <= 2) return "Il faut conserver au moins deux comptes Admin RH actifs.";
+    return null;
+  }
+
   // Extract unique departments from users list
   const departments = Array.from(
     new Set(
@@ -152,6 +177,8 @@ export default function UsersPage() {
 
   // Filter users by selected department
   const filteredUsers = users.filter((u) => {
+    const hireDate = u.employee_profile?.hire_date || u.hire_date || "";
+    if (hireDateSearch && hireDate !== hireDateSearch) return false;
     if (departmentFilter === "ALL") return true;
     const userDept =
       u.employee_profile?.department ||
@@ -160,12 +187,24 @@ export default function UsersPage() {
     return userDept === departmentFilter;
   });
 
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    if (!hireDateSort) return 0;
+    const dateA = a.employee_profile?.hire_date || a.hire_date || "";
+    const dateB = b.employee_profile?.hire_date || b.hire_date || "";
+    if (!dateA && !dateB) return 0;
+    if (!dateA) return 1;
+    if (!dateB) return -1;
+    return hireDateSort === "asc"
+      ? dateA.localeCompare(dateB)
+      : dateB.localeCompare(dateA);
+  });
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, roleFilter, departmentFilter]);
+  }, [searchQuery, roleFilter, departmentFilter, hireDateSearch]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
-  const paginatedUsers = filteredUsers.slice(
+  const totalPages = Math.max(1, Math.ceil(sortedUsers.length / PAGE_SIZE));
+  const paginatedUsers = sortedUsers.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
@@ -241,6 +280,12 @@ export default function UsersPage() {
 
   // ── Toggle User Active / Deactivate ─────────────────────────────
   async function handleToggleActive(targetUser: UserDetail) {
+    const blockedReason = targetUser.is_active ? getAdminRemovalBlockReason(targetUser) : null;
+    if (blockedReason) {
+      setFeedback({ type: "error", message: blockedReason });
+      return;
+    }
+
     setActionLoadingId(targetUser.id);
     setFeedback(null);
     try {
@@ -274,9 +319,15 @@ export default function UsersPage() {
 
   // ── Open Delete Confirmation ────────────────────────────────────
   function handleOpenDelete(targetUser: UserDetail) {
+    const blockedReason = getAdminRemovalBlockReason(targetUser);
+    if (blockedReason) {
+      setFeedback({ type: "error", message: blockedReason });
+      return;
+    }
     setDeleteError(null);
     setNeedsReassign(false);
     setDeletingUser(targetUser);
+    void refetchActiveAdminUsers();
   }
 
   // ── Redirect to the Tasks page filtered on the blocking employee ─
@@ -308,6 +359,11 @@ export default function UsersPage() {
   // ── Confirm Hard Delete ─────────────────────────────────────────
   async function handleConfirmDelete() {
     if (!deletingUser) return;
+    const blockedReason = getAdminRemovalBlockReason(deletingUser);
+    if (blockedReason) {
+      setDeleteError(blockedReason);
+      return;
+    }
 
     setIsDeleting(true);
     setDeleteError(null);
@@ -329,13 +385,14 @@ export default function UsersPage() {
         err as { response?: { data?: { detail?: string } } }
       )?.response?.data?.detail;
 
-      if (status === 409) {
+      if (status === 409 && typeof detail === "string" && detail.includes("tâches assignées")) {
         // Blocked by assigned tasks: offer the reassignment shortcut.
         setNeedsReassign(true);
         setDeleteError(
           "Impossible de supprimer : cet employé a des tâches assignées. Veuillez les réassigner d'abord."
         );
       } else {
+        setNeedsReassign(false);
         setDeleteError(
           typeof detail === "string" ? detail : "Erreur lors de la suppression."
         );
@@ -455,7 +512,7 @@ export default function UsersPage() {
       {/* ── Filters & Search Bar Card ─────────────────────────── */}
       <Card className="border border-slate-200/90 bg-white shadow-sm">
         <CardContent className="p-4 sm:p-5">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between gap-3">
             {/* Search Input */}
             <div className="relative flex-1 max-w-md">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -470,6 +527,31 @@ export default function UsersPage() {
                 <button
                   onClick={() => setSearchQuery("")}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Hire date search */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="hire-date-search" className="text-xs font-semibold text-slate-500 whitespace-nowrap">
+                Embauché le :
+              </label>
+              <Input
+                id="hire-date-search"
+                type="date"
+                aria-label="Rechercher par date d'embauche"
+                value={hireDateSearch}
+                onChange={(e) => setHireDateSearch(e.target.value)}
+                className="h-9 w-[155px] text-xs bg-slate-50/60 border-slate-200 rounded-lg"
+              />
+              {hireDateSearch && (
+                <button
+                  type="button"
+                  aria-label="Effacer la date d'embauche"
+                  onClick={() => setHireDateSearch("")}
+                  className="text-slate-400 hover:text-slate-600"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -523,6 +605,23 @@ export default function UsersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Rôle</TableHead>
               <TableHead>Département</TableHead>
+              <TableHead className="whitespace-nowrap">
+                <button
+                  type="button"
+                  onClick={() => setHireDateSort((current) => current === "asc" ? "desc" : "asc")}
+                  className="inline-flex items-center gap-1.5 font-semibold text-slate-700 hover:text-primary"
+                  aria-label={`Trier par date d'embauche ${hireDateSort === "asc" ? "décroissante" : "croissante"}`}
+                >
+                  Date d'embauche
+                  {hireDateSort === "asc" ? (
+                    <ChevronUp className="h-3.5 w-3.5 text-primary" />
+                  ) : hireDateSort === "desc" ? (
+                    <ChevronDown className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <ChevronsUpDown className="h-3 w-3 text-slate-300" />
+                  )}
+                </button>
+              </TableHead>
               <TableHead>Statut</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -550,6 +649,9 @@ export default function UsersPage() {
                     <div className="h-3 w-24 bg-slate-200 rounded" />
                   </TableCell>
                   <TableCell>
+                    <div className="h-3 w-20 bg-slate-200 rounded" />
+                  </TableCell>
+                  <TableCell>
                     <div className="h-5 w-16 bg-slate-200 rounded-full" />
                   </TableCell>
                   <TableCell className="text-right">
@@ -559,7 +661,7 @@ export default function UsersPage() {
               ))
             ) : filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12">
+                <TableCell colSpan={7} className="text-center py-12">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-3">
                     <Users className="h-6 w-6 stroke-[1.7]" />
                   </div>
@@ -567,11 +669,11 @@ export default function UsersPage() {
                     Aucun utilisateur trouvé
                   </p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                    {searchQuery || roleFilter !== "ALL" || departmentFilter !== "ALL"
+                    {searchQuery || roleFilter !== "ALL" || departmentFilter !== "ALL" || hireDateSearch
                       ? "Aucun compte ne correspond à vos critères de recherche. Essayez d'ajuster ou de réinitialiser vos filtres."
                       : "Aucun utilisateur n'est actuellement enregistré dans la base."}
                   </p>
-                  {(searchQuery || roleFilter !== "ALL" || departmentFilter !== "ALL") && (
+                  {(searchQuery || roleFilter !== "ALL" || departmentFilter !== "ALL" || hireDateSearch) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -579,6 +681,7 @@ export default function UsersPage() {
                         setSearchQuery("");
                         setRoleFilter("ALL");
                         setDepartmentFilter("ALL");
+                        setHireDateSearch("");
                       }}
                       className="mt-4 text-xs font-semibold"
                     >
@@ -594,10 +697,16 @@ export default function UsersPage() {
                   "U";
                 const isAdmin = targetUser.role === "ADMIN_RH";
                 const isCurrent = currentUser?.id === targetUser.id;
+                const adminRemovalBlockReason = getAdminRemovalBlockReason(targetUser);
                 const department =
                   targetUser.employee_profile?.department ||
                   targetUser.department ||
                   (isAdmin ? "Administration" : "—");
+                const hireDate =
+                  targetUser.employee_profile?.hire_date || targetUser.hire_date;
+                const formattedHireDate = hireDate
+                  ? hireDate.slice(0, 10).split("-").reverse().join("/")
+                  : null;
                 const position =
                   targetUser.employee_profile?.position ||
                   targetUser.position;
@@ -670,6 +779,17 @@ export default function UsersPage() {
                       <span className="text-xs text-slate-600 font-medium">
                         {department}
                       </span>
+                    </TableCell>
+
+                    {/* Date d'embauche */}
+                    <TableCell className="whitespace-nowrap">
+                      {formattedHireDate ? (
+                        <span className="text-xs font-medium text-slate-700">
+                          {formattedHireDate}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
                     </TableCell>
 
                     {/* Statut */}
@@ -748,8 +868,13 @@ export default function UsersPage() {
                           {targetUser.is_active ? (
                             <DropdownMenuItem
                               onClick={() => handleToggleActive(targetUser)}
-                              disabled={isCurrent}
+                              disabled={isCurrent || Boolean(adminRemovalBlockReason)}
                               destructive
+                              title={
+                                isCurrent
+                                  ? "Vous ne pouvez pas désactiver votre propre compte."
+                                  : adminRemovalBlockReason || undefined
+                              }
                               className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
                             >
                               <UserX className="h-3.5 w-3.5" />
@@ -770,11 +895,11 @@ export default function UsersPage() {
                           {/* Supprimer définitivement */}
                           <DropdownMenuItem
                             onClick={() => handleOpenDelete(targetUser)}
-                            disabled={isCurrent}
+                            disabled={isCurrent || Boolean(adminRemovalBlockReason)}
                             title={
                               isCurrent
                                 ? "Vous ne pouvez pas supprimer votre propre compte."
-                                : undefined
+                                : adminRemovalBlockReason || undefined
                             }
                             className="gap-2 cursor-pointer text-rose-600 focus:text-rose-700 focus:bg-rose-50"
                           >
@@ -1157,8 +1282,9 @@ export default function UsersPage() {
               <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
             </div>
             <AlertDialogDescription>
-              Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ?
-              Cette action est irréversible.
+              {getAdminRemovalBlockReason(deletingUser) || (
+                <>Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ? Cette action est irréversible.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -1194,7 +1320,7 @@ export default function UsersPage() {
             ) : (
               <Button
                 onClick={handleConfirmDelete}
-                disabled={isDeleting}
+                disabled={isDeleting || Boolean(getAdminRemovalBlockReason(deletingUser))}
                 className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
               >
                 {isDeleting ? (

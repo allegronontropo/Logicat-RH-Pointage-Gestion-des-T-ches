@@ -6,10 +6,10 @@ SQLAlchemy 2.0 model for the `employees` table.
 
 from __future__ import annotations
 
-from datetime import datetime, date, timezone
+from datetime import datetime, date, time, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, ForeignKey, Date
+from sqlalchemy import String, ForeignKey, Date, Time
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -35,6 +35,8 @@ class Employee(Base):
     department: Mapped[str | None] = mapped_column(String(100), nullable=True)
     position: Mapped[str | None] = mapped_column(String(100), nullable=True)
     hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expected_start_time: Mapped[time] = mapped_column(Time, nullable=False, default=time(9, 0))
+    expected_end_time: Mapped[time] = mapped_column(Time, nullable=False, default=time(18, 0))
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="employee")

@@ -37,6 +37,7 @@ def _build_user_read(user: User) -> UserRead:
         email=user.email,
         first_name=user.first_name,
         last_name=user.last_name,
+        phone=user.phone,
         role=user.role,
         is_active=user.is_active,
         employee_profile=employee_profile,

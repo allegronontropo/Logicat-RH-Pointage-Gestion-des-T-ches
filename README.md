@@ -24,7 +24,7 @@ cd logicat-rh
 cp .env.example .env
 # Edit .env — set a strong SECRET_KEY before running in any shared environment
 
-# 3. Start PostgreSQL
+# 3. Start PostgreSQL and Adminer
 docker compose up -d
 
 # 4. Set up the Python virtual environment
@@ -38,6 +38,20 @@ python -m venv .venv
 
 pip install -r requirements.txt  # generated during Day 1 foundation session
 ```
+
+### Browse the database with Adminer
+
+Open [`http://localhost:8081`](http://localhost:8081) after the containers are up, then sign in with:
+
+| Adminer field | Value |
+|---|---|
+| System | PostgreSQL |
+| Server | `db` |
+| Username | `DB_USER` from `.env` (default: `logicat`) |
+| Password | `DB_PASSWORD` from `.env` |
+| Database | `DB_NAME` from `.env` (default: `logicat_rh`) |
+
+Adminer is bound to the local machine only. If the login is rejected and PostgreSQL uses an existing Docker volume, check the password originally used when that volume was initialized; changing `DB_PASSWORD` in `.env` does not change an existing database user's password.
 
 ---
 

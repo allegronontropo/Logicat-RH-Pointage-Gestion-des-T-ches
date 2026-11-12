@@ -13,7 +13,7 @@ T13: Calculation: 09:00→18:00 with 15+60+15 min breaks → effective = 450 min
 
 from __future__ import annotations
 
-from datetime import datetime, date, timezone
+from datetime import datetime, date, time, timedelta, timezone
 
 from app.core.security import hash_password, create_access_token
 from app.models.user import User
@@ -237,6 +237,80 @@ def test_calculate_durations(client, db_session):
     assert presence == 540  # 9 hours = 540 minutes
     assert break_min == 90  # 1.5 hours = 90 minutes
     assert effective == 450  # 7.5 hours = 450 minutes
+
+
+def test_calculate_durations_caps_open_attendance_at_expected_end(db_session):
+    _, employee = _make_employee(db_session, "emp_open_shift@logicat.ma", "Emp123!")
+    yesterday = date.today() - timedelta(days=1)
+    attendance = Attendance(
+        employee_id=employee.id,
+        date=yesterday,
+        check_in=datetime.combine(yesterday, time(9, 0), tzinfo=timezone.utc),
+        check_out=None,
+        status="PRESENT",
+    )
+    db_session.add(attendance)
+    db_session.commit()
+    db_session.refresh(attendance)
+
+    presence, break_min, effective = calculate_durations(attendance)
+
+    assert presence == 540
+    assert break_min == 0
+    assert effective == 540
+
+
+def test_calculate_durations_clamps_both_ends_to_custom_schedule(db_session):
+    _, employee = _make_employee(db_session, "emp_custom_shift@logicat.ma", "Emp123!")
+    employee.expected_start_time = time(10, 0)
+    employee.expected_end_time = time(17, 0)
+    shift_date = date(2026, 11, 9)
+    attendance = Attendance(
+        employee_id=employee.id,
+        date=shift_date,
+        check_in=datetime(2026, 11, 9, 8, 0, tzinfo=timezone.utc),
+        check_out=datetime(2026, 11, 9, 20, 0, tzinfo=timezone.utc),
+        status="PRESENT",
+    )
+    db_session.add(attendance)
+    db_session.commit()
+    db_session.refresh(attendance)
+
+    presence, break_min, effective = calculate_durations(attendance)
+
+    assert presence == 420
+    assert break_min == 0
+    assert effective == 420
+
+
+def test_calculate_durations_clamps_open_break_at_expected_end():
+    employee = Employee(
+        id=1,
+        user_id=1,
+        expected_start_time=time(10, 0),
+        expected_end_time=time(17, 0),
+    )
+    attendance = Attendance(
+        employee=employee,
+        date=date(2026, 11, 9),
+        check_in=datetime(2026, 11, 9, 10, 0, tzinfo=timezone.utc),
+        check_out=datetime(2026, 11, 9, 18, 0, tzinfo=timezone.utc),
+        status="PRESENT",
+    )
+    attendance.breaks = [
+        Break(
+            attendance_id=1,
+            type="LUNCH",
+            start_time=datetime(2026, 11, 9, 16, 50, tzinfo=timezone.utc),
+            end_time=None,
+        )
+    ]
+
+    presence, break_min, effective = calculate_durations(attendance)
+
+    assert presence == 420
+    assert break_min == 10
+    assert effective == 410
 
 
 # ---------------------------------------------------------------------------

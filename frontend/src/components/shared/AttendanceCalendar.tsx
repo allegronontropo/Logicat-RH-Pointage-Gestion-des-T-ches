@@ -212,7 +212,7 @@ export function AttendanceCalendar({
             <DialogDescription>Timeline des pointages et pauses de la journée</DialogDescription>
           </DialogHeader>
 
-          <div id="day-timeline-export" className="space-y-4 pb-2">
+          <div id="day-timeline-preview" className="space-y-4 pb-2">
             {selectedAttendance ? (
               <>
                 <div className="grid grid-cols-3 gap-3">

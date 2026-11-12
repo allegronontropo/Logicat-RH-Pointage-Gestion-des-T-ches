@@ -16,7 +16,9 @@ export async function login(email: string, password: string): Promise<TokenRespo
 }
 
 export async function getMe(): Promise<User> {
-  const { data } = await apiClient.get<User>("/api/auth/me");
+  const { data } = await apiClient.get<User>("/api/auth/me", {
+    headers: { "Cache-Control": "no-cache, no-store", Pragma: "no-cache" },
+  });
   return data;
 }
 

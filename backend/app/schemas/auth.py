@@ -35,6 +35,7 @@ class UserRead(BaseModel):
     email: str
     first_name: str
     last_name: str
+    phone: str | None = None
     role: str
     is_active: bool
     employee_profile: EmployeeProfileRead | None = Field(

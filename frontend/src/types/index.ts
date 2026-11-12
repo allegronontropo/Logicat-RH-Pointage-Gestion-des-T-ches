@@ -23,6 +23,8 @@ export interface EmployeeProfile {
   department: string | null;
   position: string | null;
   hire_date: string | null;
+  expected_start_time?: string | null;
+  expected_end_time?: string | null;
 }
 
 export interface UserDetail extends User {
@@ -30,6 +32,8 @@ export interface UserDetail extends User {
   department?: string | null;
   position?: string | null;
   hire_date?: string | null;
+  expected_start_time?: string | null;
+  expected_end_time?: string | null;
   phone?: string | null;
   created_at?: string;
 }
@@ -97,6 +101,8 @@ export interface AdminDashboard {
 export interface EmployeeDashboard {
   status: string;
   effective_minutes: number;
+  expected_start_time: string;
+  expected_end_time: string;
   todo_tasks: number;
   in_progress_tasks: number;
   done_tasks: number;

@@ -82,6 +82,62 @@ import { listAllAttendance } from "@/api/attendances";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { useAuth } from "@/auth/useAuth";
 
+function formatScheduleTime(value?: string | null): string {
+  return value ? value.slice(0, 5) : "—";
+}
+
+async function captureReportElement(element: HTMLElement): Promise<HTMLCanvasElement> {
+  const originalStyle = element.getAttribute("style");
+  // html2canvas calculates the crop from the source element's position before
+  // it clones the page, so move the off-screen report into its fixed canvas
+  // position before capture (and restore it immediately afterward).
+  element.style.position = "fixed";
+  element.style.left = "0px";
+  element.style.top = "0px";
+  element.style.right = "auto";
+  element.style.zIndex = "-1";
+  element.style.display = "block";
+  try {
+    return await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      windowWidth: Math.max(window.innerWidth, element.scrollWidth + 40),
+      windowHeight: Math.max(window.innerHeight, element.scrollHeight + 40),
+      scrollX: 0,
+      scrollY: 0,
+      onclone: (clonedDocument) => {
+        const clone = clonedDocument.getElementById(element.id);
+        if (!clone) return;
+        clone.style.position = "fixed";
+        clone.style.left = "0px";
+        clone.style.top = "0px";
+        clone.style.right = "auto";
+        clone.style.zIndex = "999999";
+        clone.style.display = "block";
+      },
+    });
+  } finally {
+    if (originalStyle === null) element.removeAttribute("style");
+    else element.setAttribute("style", originalStyle);
+  }
+}
+
+function addReportCanvasPage(pdf: jsPDF, canvas: HTMLCanvasElement, addPage = false) {
+  if (addPage) pdf.addPage("a4", "portrait");
+  const margin = 10;
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const availableWidth = pageWidth - margin * 2;
+  const availableHeight = pageHeight - margin * 2;
+  const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+  const width = canvas.width * scale;
+  const height = canvas.height * scale;
+  const x = (pageWidth - width) / 2;
+  const y = margin + (availableHeight - height) / 2;
+  pdf.addImage(canvas.toDataURL("image/png"), "PNG", x, y, width, height);
+}
+
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -105,6 +161,8 @@ export default function UserDetailPage() {
     department: "",
     position: "",
     hire_date: "",
+    expected_start_time: "09:00",
+    expected_end_time: "18:00",
   });
   const [editError, setEditError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -164,8 +222,29 @@ export default function UserDetailPage() {
     enabled: !isNaN(userId),
   });
 
+  const {
+    data: activeAdminUsers,
+    isLoading: isActiveAdminUsersLoading,
+    isFetching: isActiveAdminUsersFetching,
+    isError: isActiveAdminUsersError,
+    refetch: refetchActiveAdminUsers,
+  } = useQuery({
+    queryKey: ["admin-users", "active-admins"],
+    queryFn: () => listUsers({ role: "ADMIN_RH", is_active: true }),
+    refetchOnWindowFocus: true,
+  });
+
+  function getAdminRemovalBlockReason(targetUser: UserDetail | null | undefined): string | null {
+    if (!targetUser || targetUser.role !== "ADMIN_RH" || !targetUser.is_active) return null;
+    if (isActiveAdminUsersLoading || isActiveAdminUsersFetching) return "Vérification des Admin RH actifs…";
+    if (isActiveAdminUsersError || !activeAdminUsers) return "Impossible de vérifier le nombre d’Admin RH actifs.";
+    if (activeAdminUsers.length <= 2) return "Il faut conserver au moins deux comptes Admin RH actifs.";
+    return null;
+  }
+
   const employeeId = user?.employee_id;
   const isEmployee = user?.role === "EMPLOYEE";
+  const todayStr = new Date().toISOString().split("T")[0];
 
   // 2. Fetch Tasks (only if employee has an employee_id)
   const {
@@ -186,10 +265,27 @@ export default function UserDetailPage() {
     refetchInterval: 60_000,
   });
 
+  // Fetch today's record separately so the daily chart does not wait for the
+  // employee's full attendance history to load.
+  const {
+    data: dailyAttendances,
+    isLoading: isDailyLoading,
+    isError: isDailyError,
+  } = useQuery({
+    queryKey: ["admin-user-attendance-daily", employeeId, todayStr],
+    queryFn: () => listAllAttendance({ employee_id: employeeId!, date: todayStr }),
+    enabled: Boolean(employeeId),
+    refetchInterval: 60_000,
+  });
+
   // 3b. Fetch Monthly Attendances for current month
   const now = new Date();
   const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const { data: monthlyAttendances = [], isLoading: isMonthlyLoading } = useQuery({
+  const {
+    data: monthlyAttendances,
+    isLoading: isMonthlyLoading,
+    isError: isMonthlyError,
+  } = useQuery({
     queryKey: ["admin-user-attendances-monthly", employeeId, monthParam],
     queryFn: () =>
       listAllAttendance({
@@ -201,12 +297,14 @@ export default function UserDetailPage() {
     refetchInterval: 60_000,
   });
 
-  const todayStr = new Date().toISOString().split("T")[0];
   const reportAttendances = useMemo(() => {
-    if (timeframe === "monthly") return monthlyAttendances;
-    const todayAttendance = attendances.find((attendance) => attendance.date === todayStr);
-    return todayAttendance ? [todayAttendance] : [];
-  }, [attendances, monthlyAttendances, timeframe, todayStr]);
+    if (timeframe === "monthly") return monthlyAttendances ?? [];
+    return dailyAttendances ?? [];
+  }, [dailyAttendances, monthlyAttendances, timeframe]);
+  const isReportLoading = timeframe === "monthly" ? isMonthlyLoading : isDailyLoading;
+  const isReportError = timeframe === "monthly"
+    ? isMonthlyError && monthlyAttendances === undefined
+    : isDailyError && dailyAttendances === undefined;
 
   const reportBreaks = useMemo(
     () => reportAttendances.flatMap((attendance) =>
@@ -239,7 +337,7 @@ export default function UserDetailPage() {
 
   // Time Breakdown Calculation
   const timeBreakdown = useMemo(() => {
-    const isLoading = timeframe === "monthly" ? isMonthlyLoading : isAttendancesLoading;
+    if (isReportLoading || isReportError) return [];
 
     let rawEffectiveMinutes = 0;
     let rawLunchMinutes = 0;
@@ -268,10 +366,6 @@ export default function UserDetailPage() {
 
     const totalTime = effective + lunch + other;
 
-    if (isLoading) {
-      return [];
-    }
-
     const chartData = [
       { name: "Travail Effectif", value: effective, color: "#10b981" },
       { name: "Pause Déjeuner", value: lunch, color: "#f59e0b" },
@@ -293,56 +387,57 @@ export default function UserDetailPage() {
         durationText: formatMinutesToTime(item.value),
       };
     });
-  }, [reportAttendances, timeframe, isAttendancesLoading, isMonthlyLoading]);
+  }, [reportAttendances, isReportError, isReportLoading]);
 
   const timeBreakdownTotal = timeBreakdown.reduce((total, item) => total + item.value, 0);
+  const reportTotals = reportAttendances.reduce(
+    (totals, attendance) => ({
+      presence: totals.presence + (attendance.presence_minutes || 0),
+      breaks: totals.breaks + (attendance.break_minutes || 0),
+      effective: totals.effective + (attendance.effective_minutes || 0),
+    }),
+    { presence: 0, breaks: 0, effective: 0 },
+  );
 
   // ── PDF Export Logic ───────────────────────────────────────────
   async function handleExportPDF() {
     if (!user) return;
+    if (isReportLoading || isReportError) {
+      setFeedback({
+        type: "error",
+        message: isReportLoading
+          ? "Les pointages sont encore en cours de chargement. Réessayez dans un instant."
+          : "Impossible de charger les pointages pour ce rapport.",
+      });
+      return;
+    }
 
     const container = document.getElementById("pdf-report-container");
-    if (!container) return;
+    const monthlyDetailsContainer = timeframe === "monthly"
+      ? document.getElementById("pdf-monthly-details-container")
+      : null;
+    if (!container || (timeframe === "monthly" && !monthlyDetailsContainer)) return;
 
     setIsExporting(true);
     try {
-      // Temporarily show the container
-      container.classList.remove("hidden");
+      const reportCanvas = await captureReportElement(container);
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      addReportCanvasPage(pdf, reportCanvas);
 
-      // Wait for render
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-      });
-
-      // Hide again
-      container.classList.add("hidden");
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const imgWidth = pdfWidth - 20;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.addImage(imgData, "PNG", 10, 10, imgWidth, imgHeight);
+      if (monthlyDetailsContainer) {
+        const detailsCanvas = await captureReportElement(monthlyDetailsContainer);
+        addReportCanvasPage(pdf, detailsCanvas, true);
+      }
 
       const safeName = `${user.first_name}_${user.last_name}`.toLowerCase().replace(/\s+/g, "_");
-      pdf.save(`repartition_temps_${safeName}.pdf`);
+      const periodSuffix = timeframe === "daily" ? "jour" : "mois";
+      pdf.save(`repartition_temps_${safeName}_${periodSuffix}.pdf`);
 
       setFeedback({
         type: "success",
         message: "Rapport PDF généré avec succès.",
       });
     } catch (err: unknown) {
-      container.classList.add("hidden");
       setFeedback({
         type: "error",
         message: "Erreur lors de la génération du PDF.",
@@ -421,6 +516,8 @@ export default function UserDetailPage() {
       department: user.department || "",
       position: user.position || "",
       hire_date: user.hire_date || "",
+      expected_start_time: user.expected_start_time?.slice(0, 5) || "09:00",
+      expected_end_time: user.expected_end_time?.slice(0, 5) || "18:00",
     });
     setEditError(null);
     setIsEditOpen(true);
@@ -456,6 +553,14 @@ export default function UserDetailPage() {
           editForm.role === "EMPLOYEE"
             ? editForm.hire_date || undefined
             : undefined,
+        expected_start_time:
+          editForm.role === "EMPLOYEE"
+            ? editForm.expected_start_time || undefined
+            : undefined,
+        expected_end_time:
+          editForm.role === "EMPLOYEE"
+            ? editForm.expected_end_time || undefined
+            : undefined,
       };
 
       await updateUser(user.id, payload);
@@ -479,6 +584,11 @@ export default function UserDetailPage() {
   // ── Toggle User Status ──────────────────────────────────────────
   async function handleToggleStatus() {
     if (!user) return;
+    const blockedReason = user.is_active ? getAdminRemovalBlockReason(user) : null;
+    if (blockedReason) {
+      setFeedback({ type: "error", message: blockedReason });
+      return;
+    }
     setIsTogglingStatus(true);
     setFeedback(null);
     try {
@@ -514,9 +624,15 @@ export default function UserDetailPage() {
   // ── Open Delete Confirmation ────────────────────────────────────
   function handleOpenDelete() {
     if (!user) return;
+    const blockedReason = getAdminRemovalBlockReason(user);
+    if (blockedReason) {
+      setFeedback({ type: "error", message: blockedReason });
+      return;
+    }
     setDeleteError(null);
     setNeedsReassign(false);
     setDeletingUser(user);
+    void refetchActiveAdminUsers();
   }
 
   // ── Redirect to the Tasks page filtered on the blocking employee ─
@@ -548,6 +664,11 @@ export default function UserDetailPage() {
   // ── Confirm Hard Delete ─────────────────────────────────────────
   async function handleConfirmDelete() {
     if (!deletingUser) return;
+    const blockedReason = getAdminRemovalBlockReason(deletingUser);
+    if (blockedReason) {
+      setDeleteError(blockedReason);
+      return;
+    }
 
     setIsDeleting(true);
     setDeleteError(null);
@@ -571,13 +692,14 @@ export default function UserDetailPage() {
         err as { response?: { data?: { detail?: string } } }
       )?.response?.data?.detail;
 
-      if (status === 409) {
+      if (status === 409 && typeof detail === "string" && detail.includes("tâches assignées")) {
         // Blocked by assigned tasks: offer the reassignment shortcut.
         setNeedsReassign(true);
         setDeleteError(
           "Impossible de supprimer : cet employé a des tâches assignées. Veuillez les réassigner d'abord."
         );
       } else {
+        setNeedsReassign(false);
         setDeleteError(
           typeof detail === "string" ? detail : "Erreur lors de la suppression."
         );
@@ -690,10 +812,10 @@ export default function UserDetailPage() {
                 variant="outline"
                 size="sm"
                 onClick={handleExportPDF}
-                disabled={isExporting}
+                disabled={isExporting || isReportLoading || isReportError}
                 className="h-9 px-3 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 gap-1.5 shadow-2xs"
               >
-                {isExporting ? (
+                {isExporting || isReportLoading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
                 ) : (
                   <Download className="h-3.5 w-3.5 text-slate-500" />
@@ -886,6 +1008,19 @@ export default function UserDetailPage() {
                       </div>
                     </div>
                   )}
+                  {user.employee_id != null && (
+                    <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                      <Clock className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-semibold text-slate-400">
+                          Horaire prévu
+                        </p>
+                        <p className="font-semibold text-slate-800">
+                          {formatScheduleTime(user.expected_start_time)} - {formatScheduleTime(user.expected_end_time)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -907,11 +1042,13 @@ export default function UserDetailPage() {
                   onClick={handleToggleStatus}
                   variant="outline"
                   size="sm"
-                  disabled={isTogglingStatus || user.id === currentUser?.id}
+                  disabled={isTogglingStatus || user.id === currentUser?.id || Boolean(user.is_active && getAdminRemovalBlockReason(user))}
                   title={
                     user.id === currentUser?.id
                       ? "Vous ne pouvez pas désactiver votre propre compte."
-                      : undefined
+                      : user.is_active
+                        ? getAdminRemovalBlockReason(user) || undefined
+                        : undefined
                   }
                   className={`h-9 flex-1 text-xs font-semibold ${
                     user.is_active
@@ -938,7 +1075,8 @@ export default function UserDetailPage() {
                 {user && user.id !== currentUser?.id && (
                   <Button
                     onClick={handleOpenDelete}
-                    disabled={isDeleting}
+                    disabled={isDeleting || Boolean(getAdminRemovalBlockReason(user))}
+                    title={getAdminRemovalBlockReason(user) || undefined}
                     variant="outline"
                     size="sm"
                     className="h-9 flex-1 text-xs font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
@@ -1161,10 +1299,12 @@ export default function UserDetailPage() {
                       variant="outline"
                       size="sm"
                       onClick={handleExportPDF}
-                      disabled={isExporting}
+                      disabled={isExporting || isReportLoading || isReportError}
                       className="h-8 px-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 border-slate-200 gap-1.5"
                     >
-                      <Download className="h-3.5 w-3.5 text-slate-500" />
+                      {isExporting || isReportLoading
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                        : <Download className="h-3.5 w-3.5 text-slate-500" />}
                       <span>Exporter PDF</span>
                     </Button>
                   </div>
@@ -1174,7 +1314,16 @@ export default function UserDetailPage() {
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                     {/* Donut Chart */}
                     <div className="md:col-span-6 flex items-center justify-center h-[220px]">
-                      {timeBreakdownTotal > 0 ? (
+                      {isReportLoading ? (
+                        <div className="flex flex-col items-center gap-2 text-xs text-slate-500">
+                          <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
+                          <span>Chargement des pointages…</span>
+                        </div>
+                      ) : isReportError ? (
+                        <div className="text-center text-xs text-rose-600 py-12">
+                          Impossible de charger les pointages. Réessayez dans un instant.
+                        </div>
+                      ) : timeBreakdownTotal > 0 ? (
                         <ResponsiveContainer width="100%" height="100%">
                           <PieChart>
                             <Pie
@@ -1230,7 +1379,11 @@ export default function UserDetailPage() {
 
                     {/* Time Breakdown Metrics Details */}
                     <div className="md:col-span-6 space-y-2.5">
-                      {timeBreakdown.map((item) => (
+                      {isReportLoading ? (
+                        <p className="text-center text-xs text-slate-500">Chargement des durées…</p>
+                      ) : isReportError ? (
+                        <p className="text-center text-xs text-rose-600">Les durées sont temporairement indisponibles.</p>
+                      ) : timeBreakdown.map((item) => (
                         <div
                           key={item.name}
                           className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50"
@@ -1539,6 +1692,37 @@ export default function UserDetailPage() {
                     }
                     className="text-xs h-8 bg-white"
                   />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-expected-start" className="text-xs font-semibold text-slate-700">
+                      Début prévu
+                    </Label>
+                    <Input
+                      id="edit-expected-start"
+                      type="time"
+                      value={editForm.expected_start_time || "09:00"}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, expected_start_time: e.target.value })
+                      }
+                      className="text-xs h-8 bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-expected-end" className="text-xs font-semibold text-slate-700">
+                      Fin prévue
+                    </Label>
+                    <Input
+                      id="edit-expected-end"
+                      type="time"
+                      value={editForm.expected_end_time || "18:00"}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, expected_end_time: e.target.value })
+                      }
+                      className="text-xs h-8 bg-white"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -1868,8 +2052,9 @@ export default function UserDetailPage() {
               <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
             </div>
             <AlertDialogDescription>
-              Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ?
-              Cette action est irréversible.
+              {getAdminRemovalBlockReason(deletingUser) || (
+                <>Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur ? Cette action est irréversible.</>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -1905,7 +2090,7 @@ export default function UserDetailPage() {
             ) : (
               <Button
                 onClick={handleConfirmDelete}
-                disabled={isDeleting}
+                disabled={isDeleting || Boolean(getAdminRemovalBlockReason(deletingUser))}
                 className="bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1.5"
               >
                 {isDeleting ? (
@@ -1926,8 +2111,12 @@ export default function UserDetailPage() {
       </AlertDialog>
 
       {/* ── Hidden PDF Report Container ── */}
-      <div id="pdf-report-container" className="hidden bg-white p-8">
-        <div style={{ maxWidth: "800px", margin: "0 auto", fontFamily: "system-ui, sans-serif" }}>
+      <div
+        id="pdf-report-container"
+        style={{ position: "fixed", left: "-9999px", top: 0, backgroundColor: "#ffffff", padding: "32px", width: "860px", zIndex: -1 }}
+        aria-hidden="true"
+      >
+        <div style={{ width: "100%", margin: "0 auto", fontFamily: "system-ui, sans-serif", color: "#0f172a" }}>
           {/* Header */}
           <div className="mb-8 pb-4 border-b-2 border-slate-200">
             <div className="flex items-center gap-3 mb-2">
@@ -2044,6 +2233,83 @@ export default function UserDetailPage() {
           </div>
         </div>
       </div>
+
+      {timeframe === "monthly" && (
+        <div
+          id="pdf-monthly-details-container"
+          style={{ position: "fixed", left: "-9999px", top: 0, backgroundColor: "#ffffff", padding: "32px", width: "860px", zIndex: -1 }}
+          aria-hidden="true"
+        >
+          <div style={{ width: "100%", fontFamily: "system-ui, sans-serif", color: "#0f172a" }}>
+            <div style={{ borderBottom: "2px solid #e2e8f0", paddingBottom: 16, marginBottom: 20 }}>
+              <h1 style={{ color: "#0f172a", fontSize: 23, fontWeight: 800, margin: "0 0 6px" }}>
+                Détail des pointages du mois
+              </h1>
+              <p style={{ color: "#475569", fontSize: 13, margin: "0 0 5px" }}>
+                {user?.first_name} {user?.last_name} · {user?.department || "Sans département"}
+              </p>
+              <p style={{ color: "#64748b", fontSize: 12, margin: 0 }}>
+                {new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+                {" · "}{reportAttendances.length} journée(s) enregistrée(s)
+              </p>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 18 }}>
+              {[
+                { label: "Présence totale", value: formatMinutesToTime(reportTotals.presence) },
+                { label: "Pauses totales", value: formatMinutesToTime(reportTotals.breaks) },
+                { label: "Temps effectif total", value: formatMinutesToTime(reportTotals.effective) },
+              ].map((item) => (
+                <div key={item.label} style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
+                  <p style={{ color: "#64748b", fontSize: 9, fontWeight: 700, margin: "0 0 4px", textTransform: "uppercase" }}>{item.label}</p>
+                  <p style={{ color: "#0f172a", fontSize: 13, fontWeight: 800, margin: 0 }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse", color: "#1e293b", fontSize: 10 }}>
+              <thead>
+                <tr style={{ backgroundColor: "#f1f5f9", color: "#334155" }}>
+                  {["Date", "Statut", "Arrivée", "Départ", "Présence", "Pauses", "Effectif"].map((heading) => (
+                    <th key={heading} style={{ padding: "8px 6px", border: "1px solid #cbd5e1", textAlign: "left", whiteSpace: "nowrap" }}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {reportAttendances.length > 0 ? [...reportAttendances]
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .map((attendance) => {
+                    const attendanceDate = new Date(`${attendance.date}T00:00:00`);
+                    const statusLabel = attendance.status === "PRESENT"
+                      ? "Présent"
+                      : attendance.status === "ABSENT_JUSTIFIED"
+                        ? "Absence justifiée"
+                        : attendance.status === "ABSENT_UNJUSTIFIED"
+                          ? "Absence non justifiée"
+                          : attendance.status;
+                    return (
+                      <tr key={attendance.id}>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{attendanceDate.toLocaleDateString("fr-FR")}</td>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0" }}>{statusLabel}</td>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{attendance.check_in ? formatDateTime(attendance.check_in) : "—"}</td>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{attendance.check_out ? formatDateTime(attendance.check_out) : "—"}</td>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{formatMinutesToTime(attendance.presence_minutes || 0)}</td>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0", whiteSpace: "nowrap" }}>{formatMinutesToTime(attendance.break_minutes || 0)}</td>
+                        <td style={{ padding: "7px 6px", border: "1px solid #e2e8f0", fontWeight: 700, whiteSpace: "nowrap" }}>{formatMinutesToTime(attendance.effective_minutes || 0)}</td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan={7} style={{ padding: 16, border: "1px solid #e2e8f0", color: "#64748b", textAlign: "center" }}>
+                        {isReportLoading ? "Chargement des pointages…" : "Aucun pointage enregistré pour ce mois."}
+                      </td>
+                    </tr>
+                  )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

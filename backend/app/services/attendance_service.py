@@ -10,7 +10,7 @@ for business-rule violations. Routers should not contain business logic.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, date, time, timezone, timedelta
 
 from fastapi import HTTPException, status as http_status
 status = http_status
@@ -331,6 +331,10 @@ def calculate_durations(
 
     now = datetime.now(timezone.utc)
 
+    employee = attendance.employee
+    expected_start = employee.expected_start_time if employee and employee.expected_start_time else time(9, 0)
+    expected_end = employee.expected_end_time if employee and employee.expected_end_time else time(18, 0)
+
     def as_utc(value: datetime) -> datetime:
         # Some database drivers return naive values for timezone-aware columns;
         # treat those stored timestamps as UTC before subtracting.
@@ -338,16 +342,22 @@ def calculate_durations(
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
 
-    presence_end = attendance.check_out or now
-    presence_minutes = max(
-        0,
-        int((as_utc(presence_end) - as_utc(attendance.check_in)).total_seconds() / 60),
+    check_in = as_utc(attendance.check_in)
+    schedule_date = check_in.date()
+    expected_start_dt = datetime.combine(schedule_date, expected_start, tzinfo=timezone.utc)
+    expected_end_dt = datetime.combine(schedule_date, expected_end, tzinfo=timezone.utc)
+    presence_start = max(check_in, expected_start_dt)
+    presence_end = min(as_utc(attendance.check_out) if attendance.check_out else now, expected_end_dt)
+    presence_minutes = (
+        int((presence_end - presence_start).total_seconds() / 60)
+        if presence_end > presence_start
+        else 0
     )
     break_minutes = 0
 
     for br in (attendance.breaks or []):
         if br.start_time:
-            break_end = br.end_time or now
+            break_end = min(as_utc(br.end_time) if br.end_time else now, expected_end_dt)
             duration = int((as_utc(break_end) - as_utc(br.start_time)).total_seconds() / 60)
             break_minutes += max(0, duration)
 

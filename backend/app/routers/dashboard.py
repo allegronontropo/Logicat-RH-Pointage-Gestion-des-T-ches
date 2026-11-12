@@ -154,6 +154,8 @@ def employee_dashboard(
     return {
         "status": status_value,
         "effective_minutes": effective_minutes,
+        "expected_start_time": current_employee.expected_start_time.strftime("%H:%M"),
+        "expected_end_time": current_employee.expected_end_time.strftime("%H:%M"),
         "todo_tasks": todo_tasks,
         "in_progress_tasks": in_progress_tasks,
         "done_tasks": done_tasks,

@@ -20,14 +20,13 @@ import {
 import { formatDateTime, formatDate } from "@/lib/utils";
 import type { Attendance } from "@/types";
 
-type StatusFilter = "ALL" | "PRESENT" | "BREAK" | "CHECKOUT" | "ABSENCE";
+type StatusFilter = "ALL" | "PRESENT" | "BREAK" | "CHECKOUT";
 
 const FILTER_LABELS: Record<StatusFilter, string> = {
   ALL: "Tous",
   PRESENT: "Présent",
   BREAK: "En Pause",
   CHECKOUT: "Sortie",
-  ABSENCE: "Absence",
 };
 
 interface RecentActivityFeedProps {
@@ -43,21 +42,22 @@ export function RecentActivityFeed({
 
   function getItemStatus(
     item: Attendance
-  ): "BREAK" | "CHECKOUT" | "PRESENT" | "ABSENCE" | "UNKNOWN" {
+  ): "BREAK" | "CHECKOUT" | "PRESENT" | "UNKNOWN" {
     const activeBreak = item.breaks?.find((b) => b.start_time && !b.end_time);
     if (activeBreak) return "BREAK";
     if (item.check_out) return "CHECKOUT";
     if (item.check_in) return "PRESENT";
-    if (
-      item.status === "ABSENT_JUSTIFIED" ||
-      item.status === "ABSENT_UNJUSTIFIED"
-    )
-      return "ABSENCE";
     return "UNKNOWN";
   }
 
+  // Absences are shown in their own dashboard section, so keep them out of
+  // this activity feed regardless of the selected activity filter.
+  const activityAttendances = attendances.filter(
+    (item) => item.status !== "ABSENT_JUSTIFIED" && item.status !== "ABSENT_UNJUSTIFIED",
+  );
+
   // Filter before slicing so that limit of rows takes the filter into consideration
-  const filteredAttendances = attendances.filter((item) => {
+  const filteredAttendances = activityAttendances.filter((item) => {
     if (statusFilter === "ALL") return true;
     return getItemStatus(item) === statusFilter;
   });
@@ -128,15 +128,6 @@ export function RecentActivityFeed({
                   <Check className="h-3.5 w-3.5 text-primary" />
                 )}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setStatusFilter("ABSENCE")}
-                className="flex items-center justify-between"
-              >
-                <span>Absence</span>
-                {statusFilter === "ABSENCE" && (
-                  <Check className="h-3.5 w-3.5 text-primary" />
-                )}
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -161,7 +152,7 @@ export function RecentActivityFeed({
               </div>
             ))}
           </div>
-        ) : attendances.length === 0 ? (
+        ) : activityAttendances.length === 0 ? (
           <div className="p-10 text-center">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mx-auto mb-2">
               <Activity className="h-5 w-5 stroke-[1.8]" />
@@ -251,18 +242,6 @@ export function RecentActivityFeed({
               badgeClass =
                 "bg-emerald-50 text-emerald-700 border-emerald-200/80";
               avatarBg = "bg-emerald-600 text-white";
-            } else if (item.status === "ABSENT_JUSTIFIED") {
-              statusLabel = "JUSTIFIÉE";
-              actionText = `Absence: ${item.justification_note || "Justifiée"}`;
-              timeText = formatDate(item.date);
-              badgeClass = "bg-amber-50 text-amber-700 border-amber-200/80";
-              avatarBg = "bg-amber-500 text-white";
-            } else if (item.status === "ABSENT_UNJUSTIFIED") {
-              statusLabel = "INJUSTIFIÉE";
-              actionText = "Absence non justifiée déclarée";
-              timeText = formatDate(item.date);
-              badgeClass = "bg-rose-50 text-rose-700 border-rose-200/80";
-              avatarBg = "bg-rose-600 text-white";
             }
 
             return (

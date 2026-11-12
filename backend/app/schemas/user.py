@@ -6,7 +6,7 @@ Pydantic schemas for user management.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -39,6 +39,8 @@ class UserUpdate(BaseModel):
     department: str | None = Field(default=None, max_length=100)
     position: str | None = Field(default=None, max_length=100)
     hire_date: date | None = None
+    expected_start_time: time | None = None
+    expected_end_time: time | None = None
     is_active: bool | None = None
 
 
@@ -75,6 +77,8 @@ class UserReadDetail(BaseModel):
     department: str | None = None
     position: str | None = None
     hire_date: date | None = None
+    expected_start_time: time | None = None
+    expected_end_time: time | None = None
 
     @classmethod
     def from_orm(cls, user: "User") -> "UserReadDetail":
@@ -91,6 +95,8 @@ class UserReadDetail(BaseModel):
             department=employee.department if employee else None,
             position=employee.position if employee else None,
             hire_date=employee.hire_date if employee else None,
+            expected_start_time=employee.expected_start_time if employee else None,
+            expected_end_time=employee.expected_end_time if employee else None,
         )
 
     model_config = {"from_attributes": True}

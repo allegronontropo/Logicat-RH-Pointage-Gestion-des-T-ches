@@ -6,7 +6,7 @@
  */
 
 import React, { createContext, useCallback, useEffect, useState } from "react";
-import { login as apiLogin, logout as apiLogout } from "@/api/auth";
+import { getMe as apiGetMe, login as apiLogin, logout as apiLogout } from "@/api/auth";
 import type { User } from "@/types";
 
 interface AuthContextValue {
@@ -14,6 +14,7 @@ interface AuthContextValue {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<User>;
+  updateUser: (user: User) => void;
   logout: () => Promise<void>;
 }
 
@@ -57,6 +58,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((updatedUser: User) => {
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+    setUser(updatedUser);
+  }, []);
+
+  // Revalidate the cached user on app startup, login, and when returning to the tab
+  // so profile changes made during an existing session appear without re-login.
+  useEffect(() => {
+    if (!token) return;
+
+    let active = true;
+    const refreshCurrentUser = async () => {
+      try {
+        const currentUser = await apiGetMe();
+        if (active) updateUser(currentUser);
+      } catch {
+        // Keep the cached user available during temporary network failures.
+      }
+    };
+
+    void refreshCurrentUser();
+    window.addEventListener("focus", refreshCurrentUser);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refreshCurrentUser);
+    };
+  }, [token, updateUser]);
+
   // Sync state if localStorage changes (e.g., 401 interceptor clears it)
   useEffect(() => {
     const handleStorage = () => {
@@ -71,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

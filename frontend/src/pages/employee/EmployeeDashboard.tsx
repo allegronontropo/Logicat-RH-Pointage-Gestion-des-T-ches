@@ -80,19 +80,38 @@ function fmtHM(minutes: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, "0")}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-function computeWorkingSeconds(checkInStr: string, breaks: BreakSummary[], now: Date): number {
+function computeWorkingSeconds(
+  checkInStr: string,
+  breaks: BreakSummary[],
+  now: Date,
+  expectedStartTime: string,
+  expectedEndTime: string,
+): number {
   const checkInMs = new Date(checkInStr).getTime();
-  const nowMs = now.getTime();
-  if (isNaN(checkInMs) || nowMs <= checkInMs) return 0;
+  if (isNaN(checkInMs)) return 0;
+  const [startHour, startMinute] = expectedStartTime.split(":").map(Number);
+  const [endHour, endMinute] = expectedEndTime.split(":").map(Number);
+  const scheduleStart = new Date(checkInMs);
+  scheduleStart.setUTCHours(startHour, startMinute, 0, 0);
+  const scheduleEnd = new Date(checkInMs);
+  scheduleEnd.setUTCHours(endHour, endMinute, 0, 0);
+  const calcStart = Math.max(checkInMs, scheduleStart.getTime());
+  const calcEnd = Math.min(now.getTime(), scheduleEnd.getTime());
+  if (calcEnd <= calcStart) return 0;
+
   let breakMs = 0;
   for (const b of breaks) {
-    if (b.start_time && b.end_time) {
+    if (b.start_time) {
       const s = new Date(b.start_time).getTime();
-      const e = new Date(b.end_time).getTime();
-      if (!isNaN(s) && !isNaN(e) && e > s) breakMs += e - s;
+      const e = b.end_time ? new Date(b.end_time).getTime() : now.getTime();
+      const clippedStart = Math.max(s, calcStart);
+      const clippedEnd = Math.min(e, calcEnd);
+      if (!isNaN(s) && !isNaN(e) && clippedEnd > clippedStart) {
+        breakMs += clippedEnd - clippedStart;
+      }
     }
   }
-  return Math.floor(Math.max(0, nowMs - checkInMs - breakMs) / 1000);
+  return Math.floor(Math.max(0, calcEnd - calcStart - breakMs) / 1000);
 }
 
 function computeBreakSeconds(startStr: string, now: Date): number {
@@ -229,7 +248,13 @@ export default function EmployeeDashboard() {
 
   const takenBreakTypes = new Set(breaks.map((b) => b.type));
   const workingSecs = isWorking && attendance?.check_in
-    ? computeWorkingSeconds(attendance.check_in, breaks, now)
+    ? computeWorkingSeconds(
+        attendance.check_in,
+        breaks,
+        now,
+        dashData?.expected_start_time ?? "09:00",
+        dashData?.expected_end_time ?? "18:00",
+      )
     : 0;
   const breakSecs = isOnBreak && activeBreak?.start_time
     ? computeBreakSeconds(activeBreak.start_time, now)
@@ -369,6 +394,9 @@ export default function EmployeeDashboard() {
                 <CardTitle className="text-sm font-bold text-slate-900">Pointage du Jour</CardTitle>
                 <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
                   {isNoRecord ? "Enregistrez votre arrivée" : isWorking ? "Session en cours" : isOnBreak ? "Pause active" : "Journée clôturée"}
+                </p>
+                <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                  Horaire prévu : {dashData?.expected_start_time ?? "09:00"} - {dashData?.expected_end_time ?? "18:00"}
                 </p>
               </div>
             </div>

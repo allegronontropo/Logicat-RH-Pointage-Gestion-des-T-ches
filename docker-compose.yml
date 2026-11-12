@@ -18,6 +18,18 @@ services:
       retries: 10
       start_period: 10s
 
+  adminer:
+    image: adminer:6
+    container_name: logicat_rh_adminer
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:8081:8080"
+
 volumes:
   pgdata:
     name: logicat_rh_pgdata
